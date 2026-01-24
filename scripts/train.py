@@ -192,6 +192,9 @@ def train_step(
 
 
 def main(config: _config.TrainConfig):
+    print("Training configuration:")
+    print(config)
+    
     init_logging()
     logging.info(f"Running on: {platform.node()}")
 
