@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+from PIL import Image  # Added for image saving
 
 def is_image_dataset(name, obj):
     # simple heuristic: image datasets are uint8 and 4D with last dim = 3
@@ -23,10 +24,25 @@ def print_hdf5_structure_with_examples(h5_path):
                 print(f"  dtype: {obj.dtype}")
 
                 if is_image_dataset(name, obj):
-                    print("  example: <skipped image data>")
+                    try:
+                        # Grab the first frame for inspection
+                        first_frame = obj[0]
+                        
+                        # Save as RGB
+                        img_rgb = Image.fromarray(first_frame)
+                        rgb_filename = f"check_rgb_{name.replace('/', '_')}.png"
+                        img_rgb.save(rgb_filename)
+                        
+                        # Save as BGR (by reversing the last dimension)
+                        img_bgr = Image.fromarray(first_frame[:, :, ::-1])
+                        bgr_filename = f"check_bgr_{name.replace('/', '_')}.png"
+                        img_bgr.save(bgr_filename)
+                        
+                        print(f"  [IMAGE SAVED] Saved test frames to {rgb_filename} and {bgr_filename}")
+                    except Exception as e:
+                        print(f"  [ERROR] Could not save image: {e}")
                 else:
                     try:
-                        # print first element safely
                         example = obj[0]
                         print(f"  example[0]: {example}")
                     except Exception as e:
@@ -238,7 +254,7 @@ def plot_ee_trajectory_and_pose(
 
 
 if __name__ == "__main__":
-    path = "/home/t-qimhuang/disk/datasets/qiming/rotate_anti_above/episode_0.hdf5"
+    path = "/home/t-qimhuang/disk/datasets/robot_caliberation_dataset/rotate_anti_above/episode_0.hdf5"
     print_hdf5_structure_with_examples(path)
     plot_ee_trajectory_and_pose(
         path,
