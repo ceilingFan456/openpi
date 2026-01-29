@@ -1,219 +1,246 @@
-import collections
-import dataclasses
-import logging
-import math
-import pathlib
+# ruff: noqa
 
-import imageio
-from libero.libero import benchmark
-from libero.libero import get_libero_path
-from libero.libero.envs import OffScreenRenderEnv
+import contextlib
+import dataclasses
+import datetime
+import faulthandler
+import os
+import signal
+import time
+from moviepy.editor import ImageSequenceClip
 import numpy as np
 from openpi_client import image_tools
-from openpi_client import websocket_client_policy as _websocket_client_policy
+from openpi_client import websocket_client_policy
+import pandas as pd
+from PIL import Image
+from droid.robot_env import RobotEnv
 import tqdm
 import tyro
 
-LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
-LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
+faulthandler.enable()
+
+# DROID data collection frequency -- we slow down execution to match this frequency
+DROID_CONTROL_FREQUENCY = 15
 
 
 @dataclasses.dataclass
 class Args:
-    #################################################################################################################
-    # Model server parameters
-    #################################################################################################################
-    host: str = "0.0.0.0"
-    port: int = 8000
-    resize_size: int = 224
-    replan_steps: int = 5
+    # Hardware parameters
+    left_camera_id: str = "<your_camera_id>"  # e.g., "24259877"
+    right_camera_id: str = "<your_camera_id>"  # e.g., "24514023"
+    wrist_camera_id: str = "<your_camera_id>"  # e.g., "13062452"
 
-    #################################################################################################################
-    # LIBERO environment-specific parameters
-    #################################################################################################################
-    task_suite_name: str = (
-        "libero_spatial"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+    # Policy parameters
+    external_camera: str | None = (
+        None  # which external camera should be fed to the policy, choose from ["left", "right"]
     )
-    num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
-    num_trials_per_task: int = 50  # Number of rollouts per task
 
-    #################################################################################################################
-    # Utils
-    #################################################################################################################
-    video_out_path: str = "data/libero/videos"  # Path to save videos
+    # Rollout parameters
+    max_timesteps: int = 600
+    # How many actions to execute from a predicted action chunk before querying policy server again
+    # 8 is usually a good default (equals 0.5 seconds of action execution).
+    open_loop_horizon: int = 8
 
-    seed: int = 7  # Random Seed (for reproducibility)
+    # Remote server parameters
+    remote_host: str = "0.0.0.0"  # point this to the IP address of the policy server, e.g., "192.168.1.100"
+    remote_port: int = (
+        8000  # point this to the port of the policy server, default server port for openpi servers is 8000
+    )
 
 
-def eval_libero(args: Args) -> None:
-    # Set random seed
-    np.random.seed(args.seed)
+# We are using Ctrl+C to optionally terminate rollouts early -- however, if we press Ctrl+C while the policy server is
+# waiting for a new action chunk, it will raise an exception and the server connection dies.
+# This context manager temporarily prevents Ctrl+C and delays it after the server call is complete.
+@contextlib.contextmanager
+def prevent_keyboard_interrupt():
+    """Temporarily prevent keyboard interrupts by delaying them until after the protected code."""
+    interrupted = False
+    original_handler = signal.getsignal(signal.SIGINT)
 
-    # Initialize LIBERO task suite
-    benchmark_dict = benchmark.get_benchmark_dict()
-    task_suite = benchmark_dict[args.task_suite_name]()
-    num_tasks_in_suite = task_suite.n_tasks
-    logging.info(f"Task suite: {args.task_suite_name}")
+    def handler(signum, frame):
+        nonlocal interrupted
+        interrupted = True
 
-    pathlib.Path(args.video_out_path).mkdir(parents=True, exist_ok=True)
+    signal.signal(signal.SIGINT, handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, original_handler)
+        if interrupted:
+            raise KeyboardInterrupt
 
-    if args.task_suite_name == "libero_spatial":
-        max_steps = 220  # longest training demo has 193 steps
-    elif args.task_suite_name == "libero_object":
-        max_steps = 280  # longest training demo has 254 steps
-    elif args.task_suite_name == "libero_goal":
-        max_steps = 300  # longest training demo has 270 steps
-    elif args.task_suite_name == "libero_10":
-        max_steps = 520  # longest training demo has 505 steps
-    elif args.task_suite_name == "libero_90":
-        max_steps = 400  # longest training demo has 373 steps
-    else:
-        raise ValueError(f"Unknown task suite: {args.task_suite_name}")
 
-    client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
+def main(args: Args):
+    # Make sure external camera is specified by user -- we only use one external camera for the policy
+    assert (
+        args.external_camera is not None and args.external_camera in ["left", "right"]
+    ), f"Please specify an external camera to use for the policy, choose from ['left', 'right'], but got {args.external_camera}"
 
-    # Start evaluation
-    total_episodes, total_successes = 0, 0
-    for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
-        # Get task
-        task = task_suite.get_task(task_id)
+    # Initialize the Panda environment. Using joint velocity action space and gripper position action space is very important.
+    env = RobotEnv(action_space="joint_velocity", gripper_action_space="position")
+    print("Created the droid env!")
 
-        # Get default LIBERO initial states
-        initial_states = task_suite.get_task_init_states(task_id)
+    # Connect to the policy server
+    policy_client = websocket_client_policy.WebsocketClientPolicy(args.remote_host, args.remote_port)
 
-        # Initialize LIBERO environment and task description
-        env, task_description = _get_libero_env(task, LIBERO_ENV_RESOLUTION, args.seed)
+    df = pd.DataFrame(columns=["success", "duration", "video_filename"])
 
-        # Start episodes
-        task_episodes, task_successes = 0, 0
-        for episode_idx in tqdm.tqdm(range(args.num_trials_per_task)):
-            logging.info(f"\nTask: {task_description}")
+    while True:
+        instruction = input("Enter instruction: ")
 
-            # Reset environment
-            env.reset()
-            action_plan = collections.deque()
+        # Rollout parameters
+        actions_from_chunk_completed = 0
+        pred_action_chunk = None
 
-            # Set initial states
-            obs = env.set_init_state(initial_states[episode_idx])
+        # Prepare to save video of rollout
+        timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H:%M:%S")
+        video = []
+        bar = tqdm.tqdm(range(args.max_timesteps))
+        print("Running rollout... press Ctrl+C to stop early.")
+        for t_step in bar:
+            start_time = time.time()
+            try:
+                # Get the current observation
+                curr_obs = _extract_observation(
+                    args,
+                    env.get_observation(),
+                    # Save the first observation to disk
+                    save_to_disk=t_step == 0,
+                )
 
-            # Setup
-            t = 0
-            replay_images = []
+                video.append(curr_obs[f"{args.external_camera}_image"])
 
-            logging.info(f"Starting episode {task_episodes+1}...")
-            while t < max_steps + args.num_steps_wait:
-                try:
-                    # IMPORTANT: Do nothing for the first few timesteps because the simulator drops objects
-                    # and we need to wait for them to fall
-                    if t < args.num_steps_wait:
-                        obs, reward, done, info = env.step(LIBERO_DUMMY_ACTION)
-                        t += 1
-                        continue
+                # Send websocket request to policy server if it's time to predict a new chunk
+                if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= args.open_loop_horizon:
+                    actions_from_chunk_completed = 0
 
-                    # Get preprocessed image
-                    # IMPORTANT: rotate 180 degrees to match train preprocessing
-                    img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-                    wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
-                    img = image_tools.convert_to_uint8(
-                        image_tools.resize_with_pad(img, args.resize_size, args.resize_size)
-                    )
-                    wrist_img = image_tools.convert_to_uint8(
-                        image_tools.resize_with_pad(wrist_img, args.resize_size, args.resize_size)
-                    )
+                    # We resize images on the robot laptop to minimize the amount of data sent to the policy server
+                    # and improve latency.
+                    request_data = {
+                        "observation/exterior_image_1_left": image_tools.resize_with_pad(
+                            curr_obs[f"{args.external_camera}_image"], 224, 224
+                        ),
+                        "observation/wrist_image_left": image_tools.resize_with_pad(curr_obs["wrist_image"], 224, 224),
+                        "observation/joint_position": curr_obs["joint_position"],
+                        "observation/gripper_position": curr_obs["gripper_position"],
+                        "prompt": instruction,
+                    }
 
-                    # Save preprocessed image for replay video
-                    replay_images.append(img)
+                    # Wrap the server call in a context manager to prevent Ctrl+C from interrupting it
+                    # Ctrl+C will be handled after the server call is complete
+                    with prevent_keyboard_interrupt():
+                        # this returns action chunk [10, 8] of 10 joint velocity actions (7) + gripper position (1)
+                        pred_action_chunk = policy_client.infer(request_data)["actions"]
+                    assert pred_action_chunk.shape == (10, 8)
 
-                    if not action_plan:
-                        # Finished executing previous action chunk -- compute new chunk
-                        # Prepare observations dict
-                        element = {
-                            "observation/image": img,
-                            "observation/wrist_image": wrist_img,
-                            "observation/state": np.concatenate(
-                                (
-                                    obs["robot0_eef_pos"],
-                                    _quat2axisangle(obs["robot0_eef_quat"]),
-                                    obs["robot0_gripper_qpos"],
-                                )
-                            ),
-                            "prompt": str(task_description),
-                        }
+                # Select current action to execute from chunk
+                action = pred_action_chunk[actions_from_chunk_completed]
+                actions_from_chunk_completed += 1
 
-                        # Query model to get action
-                        action_chunk = client.infer(element)["actions"]
-                        assert (
-                            len(action_chunk) >= args.replan_steps
-                        ), f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
-                        action_plan.extend(action_chunk[: args.replan_steps])
+                # Binarize gripper action
+                if action[-1].item() > 0.5:
+                    # action[-1] = 1.0
+                    action = np.concatenate([action[:-1], np.ones((1,))])
+                else:
+                    # action[-1] = 0.0
+                    action = np.concatenate([action[:-1], np.zeros((1,))])
 
-                    action = action_plan.popleft()
+                # clip all dimensions of action to [-1, 1]
+                action = np.clip(action, -1, 1)
 
-                    # Execute action in environment
-                    obs, reward, done, info = env.step(action.tolist())
-                    if done:
-                        task_successes += 1
-                        total_successes += 1
-                        break
-                    t += 1
+                env.step(action)
 
-                except Exception as e:
-                    logging.error(f"Caught exception: {e}")
-                    break
+                # Sleep to match DROID data collection frequency
+                elapsed_time = time.time() - start_time
+                if elapsed_time < 1 / DROID_CONTROL_FREQUENCY:
+                    time.sleep(1 / DROID_CONTROL_FREQUENCY - elapsed_time)
+            except KeyboardInterrupt:
+                break
 
-            task_episodes += 1
-            total_episodes += 1
+        video = np.stack(video)
+        save_filename = "video_" + timestamp
+        ImageSequenceClip(list(video), fps=10).write_videofile(save_filename + ".mp4", codec="libx264")
 
-            # Save a replay video of the episode
-            suffix = "success" if done else "failure"
-            task_segment = task_description.replace(" ", "_")
-            imageio.mimwrite(
-                pathlib.Path(args.video_out_path) / f"rollout_{task_segment}_{suffix}.mp4",
-                [np.asarray(x) for x in replay_images],
-                fps=10,
+        success: str | float | None = None
+        while not isinstance(success, float):
+            success = input(
+                "Did the rollout succeed? (enter y for 100%, n for 0%), or a numeric value 0-100 based on the evaluation spec"
             )
+            if success == "y":
+                success = 1.0
+            elif success == "n":
+                success = 0.0
 
-            # Log current results
-            logging.info(f"Success: {done}")
-            logging.info(f"# episodes completed so far: {total_episodes}")
-            logging.info(f"# successes: {total_successes} ({total_successes / total_episodes * 100:.1f}%)")
+            success = float(success) / 100
+            if not (0 <= success <= 1):
+                print(f"Success must be a number in [0, 100] but got: {success * 100}")
 
-        # Log final results
-        logging.info(f"Current task success rate: {float(task_successes) / float(task_episodes)}")
-        logging.info(f"Current total success rate: {float(total_successes) / float(total_episodes)}")
+        df = df.append(
+            {
+                "success": success,
+                "duration": t_step,
+                "video_filename": save_filename,
+            },
+            ignore_index=True,
+        )
 
-    logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
-    logging.info(f"Total episodes: {total_episodes}")
+        if input("Do one more eval? (enter y or n) ").lower() != "y":
+            break
+        env.reset()
+
+    os.makedirs("results", exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%I:%M%p_%B_%d_%Y")
+    csv_filename = os.path.join("results", f"eval_{timestamp}.csv")
+    df.to_csv(csv_filename)
+    print(f"Results saved to {csv_filename}")
 
 
-def _get_libero_env(task, resolution, seed):
-    """Initializes and returns the LIBERO environment, along with the task description."""
-    task_description = task.language
-    task_bddl_file = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
-    env_args = {"bddl_file_name": task_bddl_file, "camera_heights": resolution, "camera_widths": resolution}
-    env = OffScreenRenderEnv(**env_args)
-    env.seed(seed)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
-    return env, task_description
+def _extract_observation(args: Args, obs_dict, *, save_to_disk=False):
+    image_observations = obs_dict["image"]
+    left_image, right_image, wrist_image = None, None, None
+    for key in image_observations:
+        # Note the "left" below refers to the left camera in the stereo pair.
+        # The model is only trained on left stereo cams, so we only feed those.
+        if args.left_camera_id in key and "left" in key:
+            left_image = image_observations[key]
+        elif args.right_camera_id in key and "left" in key:
+            right_image = image_observations[key]
+        elif args.wrist_camera_id in key and "left" in key:
+            wrist_image = image_observations[key]
 
+    # Drop the alpha dimension
+    left_image = left_image[..., :3]
+    right_image = right_image[..., :3]
+    wrist_image = wrist_image[..., :3]
 
-def _quat2axisangle(quat):
-    """
-    Copied from robosuite: https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
-    """
-    # clip quaternion
-    if quat[3] > 1.0:
-        quat[3] = 1.0
-    elif quat[3] < -1.0:
-        quat[3] = -1.0
+    # Convert to RGB
+    left_image = left_image[..., ::-1]
+    right_image = right_image[..., ::-1]
+    wrist_image = wrist_image[..., ::-1]
 
-    den = np.sqrt(1.0 - quat[3] * quat[3])
-    if math.isclose(den, 0.0):
-        # This is (close to) a zero degree rotation, immediately return
-        return np.zeros(3)
+    # In addition to image observations, also capture the proprioceptive state
+    robot_state = obs_dict["robot_state"]
+    cartesian_position = np.array(robot_state["cartesian_position"])
+    joint_position = np.array(robot_state["joint_positions"])
+    gripper_position = np.array([robot_state["gripper_position"]])
 
-    return (quat[:3] * 2.0 * math.acos(quat[3])) / den
+    # Save the images to disk so that they can be viewed live while the robot is running
+    # Create one combined image to make live viewing easy
+    if save_to_disk:
+        combined_image = np.concatenate([left_image, wrist_image, right_image], axis=1)
+        combined_image = Image.fromarray(combined_image)
+        combined_image.save("robot_camera_views.png")
+
+    return {
+        "left_image": left_image,
+        "right_image": right_image,
+        "wrist_image": wrist_image,
+        "cartesian_position": cartesian_position,
+        "joint_position": joint_position,
+        "gripper_position": gripper_position,
+    }
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    tyro.cli(eval_libero)
+    args: Args = tyro.cli(Args)
+    main(args)
