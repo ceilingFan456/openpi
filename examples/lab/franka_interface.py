@@ -144,6 +144,25 @@ class FrankaInterface:
         """Get current force/torque readings (6D)."""
         return np.array(self.server.get_force_torque())
 
+    def start_joint_velocity_control(self, joint_vel_desired: np.ndarray):
+        """Starts joint velocity control mode.
+        Runs a non-blocking joint velocity controller.
+        The desired joint velocities can be updated using `update_desired_joint_velocities`
+        """
+        ## hz, Kq, Kqd can all be none since there are default values in the original method
+        ## https://github.com/facebookresearch/fairo/blob/main/polymetis/polymetis/python/polymetis/robot_interface.py#L608
+        ## pls refer to single_arm_server.py in lab repo
+
+        return self.server.start_joint_velocity_control(joint_vel_desired.tolist())
+
+    def update_desired_joint_velocities(self, velocities: np.ndarray):
+        """Update the desired joint velocities used by the joint velocities control mode.
+        Requires starting a joint velocities controller with `start_joint_velocity_control` beforehand.
+        """
+        ## adapted from https://github.com/facebookresearch/fairo/blob/main/polymetis/polymetis/python/polymetis/robot_interface.py#L608
+        ## pls refer to single_arm_server.py in lab repo
+        return self.server.update_desired_joint_velocities(velocities.tolist())
+
     def terminate_current_policy(self):
         """Terminate the currently running policy/controller."""
         self.server.terminate_current_policy()
