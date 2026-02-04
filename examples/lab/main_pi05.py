@@ -28,6 +28,7 @@ from typing import Optional
 from scipy.spatial.transform import Rotation as R
 import cv2
 import numpy as np
+from traitlets import observe
 import tyro
 import json
 from moviepy import ImageSequenceClip
@@ -308,9 +309,12 @@ class FrankaPolicyRunner:
         
         try:
             # Process images using resize_with_pad (same as model input)
-            display_external = camera_utils.resize_with_pad(external_img_rgb, resolution, resolution)
-            display_wrist = camera_utils.resize_with_pad(wrist_img_rgb, resolution, resolution)
-            display_left = camera_utils.resize_with_pad(left_img_rgb, resolution, resolution)
+            # display_external = camera_utils.resize_with_pad(external_img_rgb, resolution, resolution)
+            # display_wrist = camera_utils.resize_with_pad(wrist_img_rgb, resolution, resolution)
+            # display_left = camera_utils.resize_with_pad(left_img_rgb, resolution, resolution)
+            display_external = camera_utils.resize_with_pad(external_img_rgb, 320, 180)
+            display_wrist = camera_utils.resize_with_pad(wrist_img_rgb, 320, 180)
+            display_left = camera_utils.resize_with_pad(left_img_rgb, 320, 180)
             
             # Convert RGB to BGR for OpenCV display
             display_external = cv2.cvtColor(display_external, cv2.COLOR_RGB2BGR)
@@ -473,6 +477,16 @@ class FrankaPolicyRunner:
         self.policy = policy_config.create_trained_policy(policy_cfg, checkpoint_dir)
 
         print("  ✓ Policy loaded and ready")
+
+    def _get_robot_joint_state(self) -> np.ndarray:
+        """
+        Get current robot joint state.
+
+        Returns:
+            joint_state (7D): [q1, q2, q3, q4, q5, q6, q7]
+        """
+        joint_positions = self.robot.get_joint_positions()  # 7D
+        return joint_positions.astype(np.float32)
 
     def _get_robot_state(self, target_pose) -> np.ndarray:
         """
@@ -832,6 +846,7 @@ class FrankaPolicyRunner:
 
                 # 1. Get raw robot state
                 raw_state = self._get_robot_state(target_pose)
+                raw_joint_state = self._get_robot_joint_state() ## 7D
 
                 # 2. Capture images
                 ret_ext, external_img, _ = self.external_cam.read()
@@ -898,12 +913,23 @@ class FrankaPolicyRunner:
 
                     # TODO: 注意是否 crop & mask
                     RESOLUTION = 224
+                    ## it is width and height for camera_utils.resize_with_pad 
+                    # obs = {
+                    #     "image": camera_utils.resize_with_pad(external_img_rgb, RESOLUTION, RESOLUTION),
+                    #     "wrist_image": camera_utils.resize_with_pad(wrist_img_rgb, RESOLUTION, RESOLUTION),
+                    #     "left_image": camera_utils.resize_with_pad(left_img_rgb, RESOLUTION, RESOLUTION),
+                    #     "state": raw_state,
+                    #     "prompt": instruction,
+                    # }
+
+                    ## TODO check if this is the correct name mapping for all inputs.
                     obs = {
-                        "image": camera_utils.resize_with_pad(external_img_rgb, RESOLUTION, RESOLUTION),
-                        "wrist_image": camera_utils.resize_with_pad(wrist_img_rgb, RESOLUTION, RESOLUTION),
-                        "left_image": camera_utils.resize_with_pad(left_img_rgb, RESOLUTION, RESOLUTION),
-                        "state": raw_state,
-                        "prompt": instruction,
+                            "exterior_image_1_left": camera_utils.resize_with_pad(external_img_rgb, 320, 180),
+                            "exterior_image_2_left": camera_utils.resize_with_pad(left_img_rgb, 320, 180),
+                            "wrist_image_left": camera_utils.resize_with_pad(wrist_img_rgb, 320, 180),
+                            "joint_position": raw_joint_state,
+                            "gripper_position": raw_state[6:8],
+                            "task": "Place the orange test tube into the cup",
                     }
 
                     # Run inference
@@ -922,9 +948,9 @@ class FrankaPolicyRunner:
                     print(f"    Inference: {inference_time:.1f}ms")
                     print(f"    Chunk size: {len(pred_action_chunk)} actions")
                     print(f"    First action: {pred_action_chunk[0]}")
-                    print(f"      Δpos: {pred_action_chunk[0, :3]}")
-                    print(f"      Δrot (deg): {np.rad2deg(pred_action_chunk[0, 3:6])}")
-                    print(f"      Gripper: {pred_action_chunk[0, 6]:.3f}")
+                    # print(f"      Δpos: {pred_action_chunk[0, :3]}")
+                    # print(f"      Δrot (deg): {np.rad2deg(pred_action_chunk[0, 3:6])}")
+                    # print(f"      Gripper: {pred_action_chunk[0, 6]:.3f}")
 
                 # 4. Execute denormalized action
                 action = pred_action_chunk[actions_from_chunk_completed]
