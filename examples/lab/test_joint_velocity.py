@@ -3,6 +3,8 @@ import numpy as np
 
 from franka_interface import FrankaInterface  # adjust import if needed
 
+## using this script to test the joints velocity control interface. 
+
 def main():
     robot = FrankaInterface(ip="192.168.1.112", port=4242)
 
