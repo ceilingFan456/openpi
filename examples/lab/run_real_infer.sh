@@ -2,11 +2,11 @@
 
 # ----------------------------------------------------------------------------
 
-CKPT_CFG="pi05_droid_velocity"
-MODEL_NAME="$CKPT_CFG/20000"
+CKPT_CFG="pi05_lab_finetune"
+MODEL_NAME="$CKPT_CFG/2999"
 
 # ----------------------------------------------------------------------------
-ROOT_PATH="/home/showlab/VLASafety/openpi-main/examples/ckpt"
+ROOT_PATH="/home/showlab/Users/qiming/openpi/checkpoints"
 
 
 # "hf://YanzheChen/VLAST/$MODEL_NAME"
@@ -20,4 +20,8 @@ ROOT_PATH="/home/showlab/VLASafety/openpi-main/examples/ckpt"
 
 
 # 3. real-env
-python /home/showlab/Users/qiming/openpi/examples/lab/main_pi05.py --checkpoint-name $CKPT_CFG --checkpoint-path $ROOT_PATH/$MODEL_NAME --nuc-ip 192.168.1.112 --external-camera 327122079691 --wrist-camera 218622273043 --left-camera 336222073740
+## using front camera
+# python /home/showlab/Users/qiming/openpi/examples/lab/main_pi05.py --checkpoint-name $CKPT_CFG --checkpoint-path $ROOT_PATH/$MODEL_NAME --nuc-ip 192.168.1.112 --external-camera 317222075319 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel
+
+## using side camera
+python /home/showlab/Users/qiming/openpi/examples/lab/main_pi05.py --checkpoint-name $CKPT_CFG --checkpoint-path $ROOT_PATH/$MODEL_NAME --nuc-ip 192.168.1.112 --external-camera 327122079691 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel

@@ -31,7 +31,7 @@ class RobotConfig:
     nuc_port: int = 4242
 
     # Control mode: 'joint' for joint control, 'eef' for end-effector control
-    control_mode: str = "eef"  # We uses end-effector control
+    control_mode: str = "joint_vel"  # We uses end-effector control
 
     # Control frequency (Hz) - We uses 10 Hz
     control_frequency: int = 10

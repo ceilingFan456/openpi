@@ -30,9 +30,9 @@ import cv2
 import numpy as np
 from traitlets import observe
 import tyro
+from typing import Literal
 import json
 from moviepy import ImageSequenceClip
-from datetime import datetime
 
 # Import openpi modules
 from openpi.training import config as _config
@@ -220,6 +220,7 @@ class FrankaPolicyRunner:
 
         # 3. Load policy model (locally on this GPU workstation)
         self._load_policy()
+        self._bind_action_executor() ## choose how execute action based on control mode.
         
         # 4. Start camera display if enabled
         if self.config.show_cameras:
@@ -567,7 +568,7 @@ class FrankaPolicyRunner:
         self.robot.update_desired_joint_velocities(qdot_clipped.astype(np.float32))
 
         # --- Gripper control with state tracking and cooldown (copied structure from your eef method) ---
-        gripper_open = bool(gripper_cmd > 0.5)  # 1.0 means open
+        gripper_open = bool(gripper_cmd > 0.05)  # 1.0 means open
         gripper_close = not gripper_open        # Invert for robot API (True=close, False=open)
 
         # Increment cooldown counter
@@ -692,6 +693,7 @@ class FrankaPolicyRunner:
         return target_ee_pose
 
     def _compare_predicted_vs_actual(self):
+        return
         """
         Compare predicted actions vs actual robot states after chunk completion.
         Prints two types of comparisons:
@@ -717,6 +719,9 @@ class FrankaPolicyRunner:
         print(f"  {'Step':<6} {'GT Pos (m)':<30} {'Actual Pos (m)':<30} {'Pos Error (mm)':<15}")
         print(f"  {'':6} {'GT Rot (deg)':<30} {'Actual Rot (deg)':<30} {'Rot Error (deg)':<15}")
         print("  " + "-" * 90)
+
+        print(f"len(predicted_actions): {len(self.chunk_predicted_actions)}")
+        print(f"len(actual_states): {len(self.chunk_actual_states)}")
 
         for i in range(len(self.chunk_predicted_actions)):
             # Accumulate predicted action onto accumulated state
@@ -924,12 +929,12 @@ class FrankaPolicyRunner:
 
                     ## TODO check if this is the correct name mapping for all inputs.
                     obs = {
-                            "exterior_image_1_left": camera_utils.resize_with_pad(external_img_rgb, 320, 180),
-                            "exterior_image_2_left": camera_utils.resize_with_pad(left_img_rgb, 320, 180),
-                            "wrist_image_left": camera_utils.resize_with_pad(wrist_img_rgb, 320, 180),
-                            "joint_position": raw_joint_state,
-                            "gripper_position": raw_state[6:8],
-                            "task": "Place the orange test tube into the cup",
+                            "observation/exterior_image_1_left": camera_utils.resize_with_pad(external_img_rgb, 320, 180),
+                            "observation/exterior_image_2_left": camera_utils.resize_with_pad(left_img_rgb, 320, 180),
+                            "observation/wrist_image_left": camera_utils.resize_with_pad(wrist_img_rgb, 320, 180),
+                            "observation/joint_position": raw_joint_state,
+                            "observation/gripper_position": raw_state[6:8],
+                            "prompt": "Place the orange test tube into the cup",
                     }
 
                     # Run inference
@@ -960,7 +965,7 @@ class FrankaPolicyRunner:
                 if t_step % 10 == 0 or actions_from_chunk_completed == 1:
                     print(f"  [Step {t_step:3d}] Action {actions_from_chunk_completed}/{len(pred_action_chunk)}")
                     print(
-                        f"      Gripper cmd: {pred_action_chunk[0, 6]:.3f} -> {'OPEN' if pred_action_chunk[0, 6] > 0.5 else 'CLOSE'}"
+                        f"      Gripper cmd: {pred_action_chunk[0, 7]:.3f} -> {'OPEN' if pred_action_chunk[0, 7] > 0.5 else 'CLOSE'}"
                     )
 
                 target_pose = self._execute_action(action, raw_state, dt)
@@ -978,6 +983,7 @@ class FrankaPolicyRunner:
                 # time.sleep(0.01)  # Small delay to ensure robot state is updated
                 actual_state_after = self._get_robot_state(target_pose)
                 self.chunk_actual_states.append(actual_state_after.copy())
+                print(f"Current chunk actual states stored: {len(self.chunk_actual_states)}")
 
         except KeyboardInterrupt:
             print("\n\n  Rollout interrupted by user")
@@ -1050,7 +1056,7 @@ def main(
     # Robot settings
     nuc_ip: str = "192.168.1.143",
     nuc_port: int = 4242,
-    control_mode: str = "joint",
+    control_mode: Literal["joint", "eef", "joint_vel"] = "joint",
     use_mock_robot: bool = False,
     # Policy settings
     checkpoint_name: str = "pi05_droid",
