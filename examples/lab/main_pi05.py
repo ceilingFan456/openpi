@@ -568,7 +568,7 @@ class FrankaPolicyRunner:
         self.robot.update_desired_joint_velocities(qdot_clipped.astype(np.float32))
 
         # --- Gripper control with state tracking and cooldown (copied structure from your eef method) ---
-        gripper_open = bool(gripper_cmd > 0.05)  # 1.0 means open
+        gripper_open = bool(gripper_cmd > 0.045)  # 1.0 means open
         gripper_close = not gripper_open        # Invert for robot API (True=close, False=open)
 
         # Increment cooldown counter
