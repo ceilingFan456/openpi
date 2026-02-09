@@ -250,18 +250,36 @@ def plot_ee_trajectory_and_pose(
     set_view_and_save(elev=0, azim=-90, fname="ee_trajectory_right_of_robot.png")
     set_view_and_save(elev=0, azim=0, fname="ee_trajectory_front_view.png")
 
-    
+def print_all_joint_actions(h5_path, key="joint_action"):
+    with h5py.File(h5_path, "r") as f:
+        if key not in f:
+            raise KeyError(f"Key not found in HDF5 file: {key}")
+
+        joint_action = f[key][:]  # load full dataset into memory
+
+        
+
+        print(f"\n=== {key} ===")
+        print(f"shape: {joint_action.shape}")
+        print(f"dtype: {joint_action.dtype}")
+        print("\nValues:\n")
+
+        with np.printoptions(precision=6, suppress=True, linewidth=200):
+            print(joint_action)
+
 
 
 if __name__ == "__main__":
-    path = "/home/t-qimhuang/disk/datasets/robot_caliberation_dataset/rotate_anti_above/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point/orange_cube/episode_0.hdf5"
+    path = "/home/t-qimhuang/disk2/labdata_test/pick_and_place/episode_0.hdf5"
     print_hdf5_structure_with_examples(path)
-    plot_ee_trajectory_and_pose(
-        path,
-        quat_order="wxyz",
-        stride=10,
-        axis_len=0.05,
-        drift_x=0.0,
-        drift_y=1.0,
-        drift_z=0.0,
-    )
+    # plot_ee_trajectory_and_pose(
+    #     path,
+    #     quat_order="wxyz",
+    #     stride=10,
+    #     axis_len=0.05,
+    #     drift_x=0.0,
+    #     drift_y=1.0,
+    #     drift_z=0.0,
+    # )
+    print_all_joint_actions(path, key="joint_action")

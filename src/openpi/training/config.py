@@ -809,6 +809,31 @@ _CONFIGS = [
         num_train_steps=3_000,
         batch_size=12,
     ),
+
+    TrainConfig(
+        # This config is for fine-tuning pi05-DROID on a custom (smaller) DROID dataset.
+        # Here, we use LeRobot data format (like for all other fine-tuning examples)
+        # To convert your custom DROID dataset (<10s of hours) to LeRobot format, see examples/droid/convert_droid_data_to_lerobot.py
+        name="pi05_lab_finetune_orange_cube_single_point",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotDROIDDataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=2_000,
+        batch_size=12,
+    ),
     #
     # Fine-tuning Aloha configs.
     #

@@ -168,3 +168,9 @@ cython_debug/
 #.idea/
 
 *.zip
+# debug images
+check_*.png
+examples/lab/test_code/check_*.png
+# gcloud
+google-cloud-cli-*.tar.gz
+google-cloud-sdk/
