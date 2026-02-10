@@ -42,9 +42,55 @@ LIST_OF_TASK_DESCRIPTIONS = [
 ]
 
 ## copied from convert_droid_data_to_lerobot.py
-def resize_image(image, size):
-    image = Image.fromarray(image)
-    return np.array(image.resize(size, resample=Image.BICUBIC))
+# def resize_image(image, size):
+#     image = Image.fromarray(image)
+#     return np.array(image.resize(size, resample=Image.BICUBIC))
+
+import cv2
+import numpy as np
+
+def resize_with_padding(img, target_size, pad_color=(0, 0, 0)):
+    """
+    Resize image while keeping aspect ratio and pad to target size.
+    
+    Args:
+        img: input image (H, W, C)
+        target_size: (width, height)
+        pad_color: padding color (B, G, R)
+        
+    Returns:
+        Padded image of size target_size
+    """
+    target_w, target_h = target_size
+    h, w = img.shape[:2]
+
+    # Compute scaling factor
+    scale = min(target_w / w, target_h / h)
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+
+    # Resize
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+    # Compute padding
+    pad_w = target_w - new_w
+    pad_h = target_h - new_h
+
+    top = pad_h // 2
+    bottom = pad_h - top
+    left = pad_w // 2
+    right = pad_w - left
+
+    # Pad
+    padded = cv2.copyMakeBorder(
+        resized,
+        top, bottom, left, right,
+        borderType=cv2.BORDER_CONSTANT,
+        value=pad_color
+    )
+
+    return padded
+
 
 def main(data_dir: str, *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
@@ -199,9 +245,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     # Resize images to (180, 320, 3)
                     import cv2 ## cv2 uses cartesian order for width and height, which is x and y or width and height.
 
-                    exterior_image_1_resized = cv2.resize(exterior_image_1, (320, 180))
-                    exterior_image_2_resized = cv2.resize(exterior_image_2, (320, 180))
-                    wrist_image_resized = cv2.resize(wrist_image, (320, 180))
+                    # exterior_image_1_resized = cv2.resize(exterior_image_1, (320, 180))
+                    # exterior_image_2_resized = cv2.resize(exterior_image_2, (320, 180))
+                    # wrist_image_resized = cv2.resize(wrist_image, (320, 180))
+                    exterior_image_1_resized = resize_with_padding(exterior_image_1, (320, 180))
+                    exterior_image_2_resized = resize_with_padding(exterior_image_2, (320, 180))
+                    wrist_image_resized = resize_with_padding(wrist_image, (320, 180))
 
                     # Read proprio and actions
                     joint_position = joint_poss[frame_idx]  # (7,)
@@ -218,8 +267,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
 
                     dataset.add_frame(
                         {
-                            "exterior_image_1_left": exterior_image_1_resized,
-                            "exterior_image_2_left": exterior_image_2_resized,
+                            "exterior_image_1_left": exterior_image_2_resized, ## need to swap the front and left images to match. 
+                            "exterior_image_2_left": exterior_image_1_resized,
                             "wrist_image_left": wrist_image_resized,
                             "joint_position": joint_position,
                             "gripper_position": gripper_position,

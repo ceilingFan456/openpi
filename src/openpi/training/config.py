@@ -806,7 +806,7 @@ _CONFIGS = [
             ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
-        num_train_steps=3_000,
+        num_train_steps=2_000,
         batch_size=12,
     ),
 
@@ -831,7 +831,7 @@ _CONFIGS = [
             ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
-        num_train_steps=2_000,
+        num_train_steps=3_000,
         batch_size=12,
     ),
     #

@@ -568,7 +568,9 @@ class FrankaPolicyRunner:
         self.robot.update_desired_joint_velocities(qdot_clipped.astype(np.float32))
 
         # --- Gripper control with state tracking and cooldown (copied structure from your eef method) ---
-        gripper_open = bool(gripper_cmd > 0.045)  # 1.0 means open
+        # gripper_open = bool(gripper_cmd > 0.045)  # 1.0 means open
+        gripper_open = bool(gripper_cmd < 0.5)  # 1.0 means CLOSE, 0.0 means open. following original droid dataset convention. 
+
         gripper_close = not gripper_open        # Invert for robot API (True=close, False=open)
 
         # Increment cooldown counter
@@ -929,8 +931,8 @@ class FrankaPolicyRunner:
 
                     ## TODO check if this is the correct name mapping for all inputs.
                     obs = {
-                            "observation/exterior_image_1_left": camera_utils.resize_with_pad(external_img_rgb, 320, 180),
-                            "observation/exterior_image_2_left": camera_utils.resize_with_pad(left_img_rgb, 320, 180),
+                            "observation/exterior_image_2_left": camera_utils.resize_with_pad(external_img_rgb, 320, 180),
+                            "observation/exterior_image_1_left": camera_utils.resize_with_pad(left_img_rgb, 320, 180),
                             "observation/wrist_image_left": camera_utils.resize_with_pad(wrist_img_rgb, 320, 180),
                             "observation/joint_position": raw_joint_state,
                             "observation/gripper_position": raw_state[6:8],
