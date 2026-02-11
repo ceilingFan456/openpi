@@ -29,17 +29,17 @@ import h5py
 import numpy as np
 from PIL import Image
 
-REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
-LIST_OF_TASK_DESCRIPTIONS = [
-    "Place the orange cube onto the green coaster.",
-]
-
-# REPO_NAME = "ceilingfan456/lab_data_test"  # Name of the output dataset, also used for the Hugging Face Hub
-# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/labdata_test"
+# REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
 # LIST_OF_TASK_DESCRIPTIONS = [
-#     "Place the orange test tube into the gray cup.",
+#     "Place the orange cube onto the green coaster.",
 # ]
+
+REPO_NAME = "ceilingfan456/lab_data_test"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/labdata_test"
+LIST_OF_TASK_DESCRIPTIONS = [
+    "Place the orange test tube into the gray cup.",
+]
 
 ## copied from convert_droid_data_to_lerobot.py
 # def resize_image(image, size):

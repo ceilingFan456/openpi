@@ -48,12 +48,12 @@ class RobotConfig:
 class PolicyConfig:
     """Configuration for policy inference."""
 
-    checkpoint_name: str = "pi0_build_left150_hor16_4_step20k_b16"
+    checkpoint_name: str = "pi0_build_left150_hor16_4_step20k_b16" ## this one is actually used to find the training config. 
     checkpoint_path: str = "/home/showlab/VLASafety/openpi-main/examples/ckpt/pi0_build_left150_hor16_4_step20k_b16/20000"
 
     # TODO: Action execution
-    action_horizon: int = 4
-    open_loop_horizon: int = 4
+    action_horizon: int = 16
+    open_loop_horizon: int = 16
 
     # Default prompt if none provided
     default_prompt: Optional[str] = None

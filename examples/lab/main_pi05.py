@@ -17,6 +17,8 @@ Usage:
     python main.py --nuc-ip 192.168.1.143 --external-camera <serial>
 """
 
+SINGLE_TASK="Place the orange cube onto the green coaster."
+
 import contextlib
 import datetime
 import signal
@@ -466,7 +468,9 @@ class FrankaPolicyRunner:
         print(f"  Checkpoint: {self.config.policy.checkpoint_path}")
 
         # Get policy config
+        print(f"Trying to load policy config... {self.config.policy.checkpoint_name}")
         policy_cfg = _config.get_config(self.config.policy.checkpoint_name)
+        print(f"Loaded policy is configured for task: {policy_cfg}")
 
         # Download checkpoint if needed
         print("  Downloading checkpoint (if not cached)...")
@@ -488,6 +492,29 @@ class FrankaPolicyRunner:
         """
         joint_positions = self.robot.get_joint_positions()  # 7D
         return joint_positions.astype(np.float32)
+
+    def _get_gripper_position(self) -> np.ndarray:
+        """
+        Get current gripper position.
+
+        Returns:
+            gripper_width (1D): [width]
+        """
+        gripper_pos = self.robot.get_gripper_position()[0:1]  # Assuming get_gripper_position returns [width, ...]
+        return gripper_pos.astype(np.float32)
+    
+    def _get_gripper_position_normalised(self) -> np.ndarray:
+        """
+        Get current gripper position normalized to [0, 1].
+
+        Returns:
+            gripper_width_normalized (1D): [width_normalized]
+        """
+        gripper_pos = self._get_gripper_position()
+        # Assuming max gripper width is around 0.08m (80mm), normalize accordingly
+        gripper_width_normalized = np.clip((0.08 - gripper_pos) / 0.08, 0.0, 1.0) ## 1.0 means fully closed, 0.0 means fully open. 
+        return gripper_width_normalized.astype(np.float32)
+
 
     def _get_robot_state(self, target_pose) -> np.ndarray:
         """
@@ -852,8 +879,12 @@ class FrankaPolicyRunner:
                 step_start_time = time.time()
 
                 # 1. Get raw robot state
-                raw_state = self._get_robot_state(target_pose)
+                # raw_state = self._get_robot_state(target_pose)
                 raw_joint_state = self._get_robot_joint_state() ## 7D
+                gripper_state = self._get_gripper_position_normalised() ## 1D normalized
+
+                ## compute raw_state, will be concatenation of xyz row pitch yaw and yanzhe's gripper definition. to get the gripper timeout to work. 
+                raw_state = self._get_robot_state(target_pose)
 
                 # 2. Capture images
                 ret_ext, external_img, _ = self.external_cam.read()
@@ -891,7 +922,7 @@ class FrankaPolicyRunner:
                     actions_from_chunk_completed = 0
                     self.chunk_predicted_actions = []
                     self.chunk_actual_states = []
-                    self.chunk_initial_state = raw_state.copy()
+                    self.chunk_initial_state = raw_joint_state.copy()
 
                     # RESOLUTION = 256
                     # CROP_CONFIG = {"front": (180, 180, 300), "left": (350, 120, 250)}
@@ -935,8 +966,8 @@ class FrankaPolicyRunner:
                             "observation/exterior_image_1_left": camera_utils.resize_with_pad(left_img_rgb, 320, 180),
                             "observation/wrist_image_left": camera_utils.resize_with_pad(wrist_img_rgb, 320, 180),
                             "observation/joint_position": raw_joint_state,
-                            "observation/gripper_position": raw_state[6:8],
-                            "prompt": "Place the orange test tube into the cup",
+                            "observation/gripper_position": gripper_state,
+                            "prompt": SINGLE_TASK,
                     }
 
                     # Run inference
