@@ -257,8 +257,6 @@ def print_all_joint_actions(h5_path, key="joint_action"):
 
         joint_action = f[key][:]  # load full dataset into memory
 
-        
-
         print(f"\n=== {key} ===")
         print(f"shape: {joint_action.shape}")
         print(f"dtype: {joint_action.dtype}")
@@ -266,12 +264,59 @@ def print_all_joint_actions(h5_path, key="joint_action"):
 
         with np.printoptions(precision=6, suppress=True, linewidth=200):
             print(joint_action)
+        
+        key = "observations/joint_vel"
+        joint_action = f[key][:, 7:9]  # load full dataset into memory
+
+        print(f"\n=== {key} === gripper component ===")
+        print(f"shape: {joint_action.shape}")
+        print(f"dtype: {joint_action.dtype}")
+        print("\nValues:\n")
+        
+        with np.printoptions(precision=6, suppress=True, linewidth=200):
+            print(joint_action)
+        
+        key = "observations/joint_pos"
+        joint_action = f[key][:, 7:9]  # load full dataset into memory
+
+        print(f"\n=== {key} === gripper component ===")
+        print(f"shape: {joint_action.shape}")
+        print(f"dtype: {joint_action.dtype}")
+        print("\nValues:\n")
+
+        with np.printoptions(precision=6, suppress=True, linewidth=200):
+            print(joint_action)
+
+        
+        joint_pos = f["observations/joint_pos"][:, 7:9]
+        joint_vel = f["observations/joint_vel"][:, 7:9]
+        
+        together = np.concatenate([joint_pos, joint_vel], axis=1)
+        
+        print(f"\n=== joint_pos and joint_vel concatenated ===")
+        print(f"shape: {together.shape}")
+        print(f"dtype: {together.dtype}")
+        print("\nValues:\n")
+
+        with np.printoptions(precision=6, suppress=True, linewidth=200):
+            print(together)
+
+        # key = "stage"
+        # joint_action = f[key]  # load full dataset into memory
+
+        # print(f"\n=== {key} ===")
+        # print(f"shape: {joint_action.shape}")
+        # print(f"dtype: {joint_action.dtype}")
+        # print("\nValues:\n")
+
+        # with np.printoptions(precision=6, suppress=True, linewidth=200):
+        #     print(joint_action)
 
 
 
 if __name__ == "__main__":
-    # path = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point/orange_cube/episode_0.hdf5"
-    path = "/home/t-qimhuang/disk2/labdata_test/pick_and_place/episode_0.hdf5"
+    path = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point/orange_cube/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk2/labdata_test/pick_and_place/episode_0.hdf5"
     print_hdf5_structure_with_examples(path)
     # plot_ee_trajectory_and_pose(
     #     path,

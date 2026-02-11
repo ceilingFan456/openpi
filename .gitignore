@@ -174,3 +174,5 @@ examples/lab/test_code/check_*.png
 # gcloud
 google-cloud-cli-*.tar.gz
 google-cloud-sdk/
+
+examples/lab/test_code/*.png

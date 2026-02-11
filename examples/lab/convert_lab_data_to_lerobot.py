@@ -229,7 +229,15 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 
                 joint_poss = f["observations/joint_pos"][:, :7] ## shape (T, 7), after cutting out from (T, 9) ##  [j0, j1, j2, j3, j4, j4, j5, j6, gripper L, gripper R]
                 joint_vels = f["observations/joint_vel"][:, :7] 
-                joint_vels = np.concatenate([joint_vels, gripper_poss_converted], axis=-1) ## shape (T, 8), append gripper position as action. 
+
+                ## need to normalise gripper state to match the original dataset 
+                gripper_state = f["observations/joint_pos"][:, 7:8] ## shape (T, 1), the last two dimensions are gripper left and right positions. we can use either one since they should be the same. we will use the left one. 
+
+                ## 1 means fully closed
+                gripper_state_degree_of_closeness = 0.08 - gripper_state ## shape (T, 1), the larger the value, the more closed the gripper is. when gripper_state is 0.0 (fully open), degree_of_closeness is 0.08, when gripper_state is 0.08 (fully closed), degree_of_closeness is 0.0.
+                gripper_state_normalised = gripper_state_degree_of_closeness / 0.08 ## shape (T, 1) 
+                
+                joint_vels = np.concatenate([joint_vels, gripper_state_normalised], axis=-1) ## shape (T, 8), append gripper position as action. 
                 wrist_images = f["observations/images/camera_wrist_color"] ## (287, 480, 640, 3)
                 front_images = f["observations/images/camera_front_color"] ## (287, 480, 640, 3)
                 left_images = f["observations/images/camera_left_color"] ## (287, 480, 640, 3)
@@ -238,8 +246,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
 
                 for frame_idx in range(num_frames):
                     # Read images
-                    exterior_image_1 = front_images[frame_idx]  # (480, 640, 3)
-                    exterior_image_2 = left_images[frame_idx]  # (480, 640, 3)
+                    front_image = front_images[frame_idx]  # (480, 640, 3)
+                    left_image = left_images[frame_idx]  # (480, 640, 3)
                     wrist_image = wrist_images[frame_idx]  # (480, 640, 3)
 
                     # Resize images to (180, 320, 3)
@@ -248,27 +256,27 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     # exterior_image_1_resized = cv2.resize(exterior_image_1, (320, 180))
                     # exterior_image_2_resized = cv2.resize(exterior_image_2, (320, 180))
                     # wrist_image_resized = cv2.resize(wrist_image, (320, 180))
-                    exterior_image_1_resized = resize_with_padding(exterior_image_1, (320, 180))
-                    exterior_image_2_resized = resize_with_padding(exterior_image_2, (320, 180))
+                    front_image_resized = resize_with_padding(front_image, (320, 180))
+                    left_image_resized = resize_with_padding(left_image, (320, 180))
                     wrist_image_resized = resize_with_padding(wrist_image, (320, 180))
 
                     # Read proprio and actions
                     joint_position = joint_poss[frame_idx]  # (7,)
-                    gripper_position = gripper_poss_converted[frame_idx]  # (1,)
+                    gripper_position = gripper_state_normalised[frame_idx]  # (1,)
                     actions = joint_vels[frame_idx]  # (8,)
                     
                     # print("joint_position", type(joint_poss[frame_idx]), np.shape(joint_poss[frame_idx]))
                     # print("gripper_position", type(gripper_poss[frame_idx]), np.shape(gripper_poss[frame_idx]))
                     # print("actions", type(joint_vels[frame_idx]), np.shape(joint_vels[frame_idx]))
-                    # print("exterior_image_1_resized", type(exterior_image_1_resized), np.shape(exterior_image_1_resized))
-                    # print("exterior_image_2_resized", type(exterior_image_2_resized), np.shape(exterior_image_2_resized))
+                    # print("front_image_resized", type(front_image_resized), np.shape(front_image_resized))
+                    # print("left_image_resized", type(left_image_resized), np.shape(left_image_resized))
                     # print("wrist_image_resized", type(wrist_image_resized), np.shape(wrist_image_resized))
                     # print("task description", LIST_OF_TASK_DESCRIPTIONS[task_idx])
 
                     dataset.add_frame(
                         {
-                            "exterior_image_1_left": exterior_image_2_resized, ## need to swap the front and left images to match. 
-                            "exterior_image_2_left": exterior_image_1_resized,
+                            "exterior_image_1_left": left_image_resized, ## need to swap the front and left images to match. 
+                            "exterior_image_2_left": front_image_resized,
                             "wrist_image_left": wrist_image_resized,
                             "joint_position": joint_position,
                             "gripper_position": gripper_position,
