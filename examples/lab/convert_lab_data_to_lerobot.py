@@ -29,17 +29,17 @@ import h5py
 import numpy as np
 from PIL import Image
 
-# REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point"  # Name of the output dataset, also used for the Hugging Face Hub
-# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
-# LIST_OF_TASK_DESCRIPTIONS = [
-#     "Place the orange cube onto the green coaster.",
-# ]
-
-REPO_NAME = "ceilingfan456/lab_data_test"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/labdata_test"
+REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
 LIST_OF_TASK_DESCRIPTIONS = [
-    "Place the orange test tube into the gray cup.",
+    "Place the orange cube onto the green coaster.",
 ]
+
+# REPO_NAME = "ceilingfan456/lab_data_test"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/labdata_test"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange test tube into the gray cup.",
+# ]
 
 ## copied from convert_droid_data_to_lerobot.py
 # def resize_image(image, size):
@@ -219,13 +219,13 @@ def main(data_dir: str, *, push_to_hub: bool = False):
             with h5py.File(hdf5_file_path, "r") as f:
                 timestamps = f["timestamp"] ## shape (T,)
 
-                gripper_poss = f["joint_action"][:] ## shape (T,), this value is in {0.0, 0.08}, which represents the distance of gripper openning. 
-                gripper_poss[0] = 0.08 ## gripper always starts as fully opening. 
+                gripper_action = f["joint_action"][:] ## shape (T,), this value is in {0.0, 0.08}, which represents the distance of gripper openning. 
+                gripper_action[0] = 0.08 ## gripper always starts as fully opening. 
                 ## thus we need to convert the values back to the original gripper position values in [0, 1] range. similar to droid dataset.
-                gripper_poss_is_close = gripper_poss < 0.04 ## shape (T,), we use 0.04 as the threshold since the values are either 0.0 or 0.08. Droid dataset treats 1.0 as close. 
+                gripper_action_is_close = gripper_action < 0.04 ## shape (T,), we use 0.04 as the threshold since the values are either 0.0 or 0.08. Droid dataset treats 1.0 as close. 
                 ## use the 0-1 range values instead of the actual joint positions. shape (T,) the joint action here refers to gripper action. 
-                gripper_poss_converted = gripper_poss_is_close.astype(np.float32) ## shape (T,), values in {0.0, 1.0}, where 1.0 means close and 0.0 means open.
-                gripper_poss_converted = gripper_poss_converted[:, None] ## make it (T, 1) for concatenation later.
+                gripper_action_converted = gripper_action_is_close.astype(np.float32) ## shape (T,), values in {0.0, 1.0}, where 1.0 means close and 0.0 means open.
+                gripper_action_converted = gripper_action_converted[:, None] ## make it (T, 1) for concatenation later.
                 
                 joint_poss = f["observations/joint_pos"][:, :7] ## shape (T, 7), after cutting out from (T, 9) ##  [j0, j1, j2, j3, j4, j4, j5, j6, gripper L, gripper R]
                 joint_vels = f["observations/joint_vel"][:, :7] 
@@ -237,7 +237,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 gripper_state_degree_of_closeness = 0.08 - gripper_state ## shape (T, 1), the larger the value, the more closed the gripper is. when gripper_state is 0.0 (fully open), degree_of_closeness is 0.08, when gripper_state is 0.08 (fully closed), degree_of_closeness is 0.0.
                 gripper_state_normalised = gripper_state_degree_of_closeness / 0.08 ## shape (T, 1) 
                 
-                joint_vels = np.concatenate([joint_vels, gripper_state_normalised], axis=-1) ## shape (T, 8), append gripper position as action. 
+                joint_vels = np.concatenate([joint_vels, gripper_action_converted], axis=-1) ## shape (T, 8), append gripper position as action. 
                 wrist_images = f["observations/images/camera_wrist_color"] ## (287, 480, 640, 3)
                 front_images = f["observations/images/camera_front_color"] ## (287, 480, 640, 3)
                 left_images = f["observations/images/camera_left_color"] ## (287, 480, 640, 3)
@@ -266,7 +266,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     actions = joint_vels[frame_idx]  # (8,)
                     
                     # print("joint_position", type(joint_poss[frame_idx]), np.shape(joint_poss[frame_idx]))
-                    # print("gripper_position", type(gripper_poss[frame_idx]), np.shape(gripper_poss[frame_idx]))
+                    # print("gripper_position", type(gripper_action[frame_idx]), np.shape(gripper_action[frame_idx]))
                     # print("actions", type(joint_vels[frame_idx]), np.shape(joint_vels[frame_idx]))
                     # print("front_image_resized", type(front_image_resized), np.shape(front_image_resized))
                     # print("left_image_resized", type(left_image_resized), np.shape(left_image_resized))
