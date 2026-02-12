@@ -13,3 +13,6 @@ git push
 
 ## or use hf upload
 hf upload ceilingfan456/lab_training_orange_cube_single_point_wrong_gripper_state .
+
+## use below to download checkpoints
+git clone https://huggingface.co/ceilingfan456/lab_training_orange_cube_single_point/
