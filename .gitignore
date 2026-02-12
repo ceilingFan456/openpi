@@ -178,3 +178,5 @@ google-cloud-sdk/
 examples/lab/test_code/*.png
 
 selected_checkpoints/
+
+old_checkpoints/
