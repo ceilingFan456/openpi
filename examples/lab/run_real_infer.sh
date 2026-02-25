@@ -1,12 +1,20 @@
 # cd /home/showlab/VLASafety/openpi-main/examples/lab
 
 # ----------------------------------------------------------------------------
-
+## orange cube baseline dataset with 25 episodes, it uses front camera
 CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
 MODEL_NAME="$CKPT_CFG/1999"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/lab_training_orange_cube_single_point"
+# ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
-ROOT_PATH="/home/showlab/Users/qiming/openpi/checkpoints/lab_training_orange_cube_single_point"
+## test tube moving with 40 episodes.
+## it uses side camera
+# CKPT_CFG="pi05_lab_finetune"
+# MODEL_NAME="$CKPT_CFG/2999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05-lab-finetune-2999"
+# ----------------------------------------------------------------------------
+
 
 
 # "hf://YanzheChen/VLAST/$MODEL_NAME"
@@ -21,8 +29,8 @@ ROOT_PATH="/home/showlab/Users/qiming/openpi/checkpoints/lab_training_orange_cub
 
 # 3. real-env
 ## using front camera
-python /home/showlab/Users/qiming/openpi/examples/lab/main_pi05.py --checkpoint-name $CKPT_CFG --checkpoint-path $ROOT_PATH/$MODEL_NAME --nuc-ip 192.168.1.112 --external-camera 317222075319 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel
+python /home/eva-01/code/openpi/examples/lab/main_pi05.py --checkpoint-name $CKPT_CFG --checkpoint-path $ROOT_PATH/$MODEL_NAME --nuc-ip 192.168.1.112 --external-camera 317222075319 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel
 
 ## using side camera
 ## --checkpoint-name is my traininig config name. 
-# python /home/showlab/Users/qiming/openpi/examples/lab/main_pi05.py --checkpoint-name $CKPT_CFG --checkpoint-path $ROOT_PATH/$MODEL_NAME --nuc-ip 192.168.1.112 --external-camera 327122079691 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel
+# python /home/eva-01/code/openpi/examples/lab/main_pi05.py --checkpoint-name $CKPT_CFG --checkpoint-path $ROOT_PATH/$MODEL_NAME --nuc-ip 192.168.1.112 --external-camera 327122079691 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel
