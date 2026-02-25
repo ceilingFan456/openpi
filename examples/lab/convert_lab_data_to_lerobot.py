@@ -25,6 +25,7 @@ from jax import numpy_dtype_promotion
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from sympy import N
+from transformers.pipelines import task
 import tyro
 import os
 import h5py
@@ -32,13 +33,25 @@ import numpy as np
 from PIL import Image
 NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 
+
 ## reduce demonstration number to 10
-REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_10"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
+REPO_NAME = "ceilingfan456/lab_data_matched_fake_real_dataset"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data"
 LIST_OF_TASK_DESCRIPTIONS = [
     "Place the orange cube onto the green coaster.",
+    "Place the orange cube onto the green coaster.",
 ]
-NUM_EPISODES = 10  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+NUM_EPISODES = [25, 25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+
+
+
+## reduce demonstration number to 10
+# REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_10"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange cube onto the green coaster.",
+# ]
+# NUM_EPISODES = 10  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 
 ## 25 demonstrations
 # REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point"  # Name of the output dataset, also used for the Hugging Face Hub
@@ -212,6 +225,9 @@ def main(data_dir: str, *, push_to_hub: bool = False):
         if os.path.isdir(os.path.join(RAW_DATASET_DIR_PATH, name))
     ]
 
+    ## sort paths
+    task_dir_paths = sorted(task_dir_paths)  # Sort to ensure consistent ordering
+
     assert len(task_dir_paths) == len(LIST_OF_TASK_DESCRIPTIONS), "Number of task directories does not match number of task descriptions"
     
     for task_idx, task_dir_path in enumerate(task_dir_paths):
@@ -228,8 +244,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
         hdf5_file_paths = sorted(hdf5_file_paths)  # Sort to ensure consistent ordering
         
         ## TODO make it better
-        if NUM_EPISODES is not None:
+        if isinstance(NUM_EPISODES, int):
             hdf5_file_paths = hdf5_file_paths[:NUM_EPISODES]  # Use only the first 10 demonstrations for this example
+        elif isinstance(NUM_EPISODES, list):
+            selected_num_episodes = NUM_EPISODES[task_idx]
+            hdf5_file_paths = hdf5_file_paths[:selected_num_episodes]
+        # else use all episodes
         
         for episode_idx, hdf5_file_path in enumerate(hdf5_file_paths):
             ## read the motion data from the hdf5 file
