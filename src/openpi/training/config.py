@@ -918,6 +918,29 @@ _CONFIGS = [
     ),
 
     TrainConfig(
+        # use only 10 episodes.
+        name="pi05_lab_finetune_orange_cube_single_point_10",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotLabDataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point_10",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=2_000,
+        batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
+    ),
+
+    TrainConfig(
         # this setup is the orange_cube dataset but with only using the single base view. left camera. 
         name="pi05_lab_finetune_orange_cube_single_point_single_base_view",
         model=pi0_config.Pi0Config(
