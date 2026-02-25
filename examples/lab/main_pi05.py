@@ -241,7 +241,7 @@ class FrankaPolicyRunner:
         if self._viewer_proc is not None:
             return
         
-        self._frame_dir = "/tmp/robot_camera_frames"
+        self._frame_dir = os.path.expanduser("~/tmp/robot_camera_frames")
         os.makedirs(self._frame_dir, exist_ok=True)
         
         # Launch the camera viewer in a separate process

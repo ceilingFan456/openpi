@@ -20,6 +20,7 @@ import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
+import openpi.policies.lab_policy as lab_policy
 import openpi.shared.download as _download
 import openpi.shared.normalize as _normalize
 import openpi.training.droid_rlds_dataset as droid_rlds_dataset
@@ -463,6 +464,45 @@ class LeRobotDROIDDataConfig(DataConfigFactory):
 
 
 @dataclasses.dataclass(frozen=True)
+class LeRobotLabDataConfig(DataConfigFactory):
+    """
+    Example data config for custom lab dataset in LeRobot format.
+    To convert your custom DROID dataset (<10s of hours) to LeRobot format, see examples/droid/convert_droid_data_to_lerobot.py
+    """
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "observation/exterior_image_1_left": "exterior_image_1_left",
+                        "observation/exterior_image_2_left": "exterior_image_2_left",
+                        "observation/wrist_image_left": "wrist_image_left",
+                        "observation/joint_position": "joint_position",
+                        "observation/gripper_position": "gripper_position",
+                        "actions": "actions",
+                        "prompt": "prompt",
+                    }
+                )
+            ]
+        )
+        # We assume joint *velocity* actions, so we should *not* apply an additional delta transform.
+        data_transforms = _transforms.Group(
+            inputs=[lab_policy.LabInputs(model_type=model_config.model_type)],
+            outputs=[lab_policy.LabOutputs()],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class TrainConfig:
     # Name of the config. Must be unique. Will be used to reference this config.
     name: tyro.conf.Suppress[str]
@@ -795,7 +835,7 @@ _CONFIGS = [
             action_dim=32,  # pi05 is trained with 32-dim actions
             action_horizon=16,
         ),
-        data=LeRobotDROIDDataConfig(
+        data=LeRobotLabDataConfig(
             # Replace with your custom DROID LeRobot dataset repo id.
             repo_id="ceilingfan456/lab_data_test",
             base_config=DataConfig(prompt_from_task=True),
@@ -820,7 +860,7 @@ _CONFIGS = [
             action_dim=32,  # pi05 is trained with 32-dim actions
             action_horizon=16,
         ),
-        data=LeRobotDROIDDataConfig(
+        data=LeRobotLabDataConfig(
             # Replace with your custom DROID LeRobot dataset repo id.
             repo_id="ceilingfan456/lab_data_orange_cube_single_point",
             base_config=DataConfig(prompt_from_task=True),

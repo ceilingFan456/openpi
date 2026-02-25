@@ -282,6 +282,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                             "gripper_position": gripper_position,
                             "actions": actions,
                             "task": LIST_OF_TASK_DESCRIPTIONS[task_idx],
+                            "prompt": LIST_OF_TASK_DESCRIPTIONS[task_idx], ## TODO figure out if this is the correct way. 
                         }
                     )
                 
