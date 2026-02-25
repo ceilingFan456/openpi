@@ -21,19 +21,31 @@ Running this conversion script will take approximately 30 minutes.
 from pickle import LIST
 import shutil
 
+from jax import numpy_dtype_promotion
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+from sympy import N
 import tyro
 import os
 import h5py
 import numpy as np
 from PIL import Image
+NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 
-REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point"  # Name of the output dataset, also used for the Hugging Face Hub
+## reduce demonstration number to 10
+REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_10"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
 LIST_OF_TASK_DESCRIPTIONS = [
     "Place the orange cube onto the green coaster.",
 ]
+NUM_EPISODES = 10  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+
+## 25 demonstrations
+# REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange cube onto the green coaster.",
+# ]
 
 # REPO_NAME = "ceilingfan456/lab_data_test"  # Name of the output dataset, also used for the Hugging Face Hub
 # RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/labdata_test"
@@ -212,6 +224,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
             for name in os.listdir(task_dir_path)
             if name.endswith(".hdf5")
         ]
+
+        hdf5_file_paths = sorted(hdf5_file_paths)  # Sort to ensure consistent ordering
+        
+        ## TODO make it better
+        if NUM_EPISODES is not None:
+            hdf5_file_paths = hdf5_file_paths[:NUM_EPISODES]  # Use only the first 10 demonstrations for this example
         
         for episode_idx, hdf5_file_path in enumerate(hdf5_file_paths):
             ## read the motion data from the hdf5 file
