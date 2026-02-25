@@ -961,6 +961,7 @@ class FrankaPolicyRunner:
                     # }
 
                     ## TODO check if this is the correct name mapping for all inputs.
+                    ## use left image as the main image for better consistency with droid dataset. 
                     obs = {
                             "observation/exterior_image_2_left": camera_utils.resize_with_pad(external_img_rgb, 320, 180),
                             "observation/exterior_image_1_left": camera_utils.resize_with_pad(left_img_rgb, 320, 180),
