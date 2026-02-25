@@ -14,10 +14,30 @@ def convert_sim_to_hdf5(npz_path, video_path, output_hdf5, fps=15.0):
     data = np.load(npz_path)
     ee_pose = data['robot_eef']          # Shape: (N, 7) -> [x, y, z, qx, qy, qz, qw]
     gripper = data['robot_gripper']      # Shape: (N,)
+    joint_pos = data['robot_joint_pos']  # Shape: (N, 7)
+
+    # print(f"loaded npz data has keys {data.keys()}") ## keys are {robot_eef, robot_gripper, robot_joint_pos}
+    # print(f"gripper data is {gripper}") ## everything is 0.08, doesnt have gripper closing signal. 
+ 
+    print(f"ee_pose shape: {ee_pose.shape}, gripper shape: {gripper.shape}, joint_pos shape: {joint_pos.shape}")
     
     # Combine into 8D format required by conversion script: [pos, quat, gripper]
     combined_ee_pose = np.hstack([ee_pose, gripper.reshape(-1, 1)]).astype(np.float32)
     N = len(combined_ee_pose)
+
+    ## Combine into 9D format to be [7 joint pose, gripper left and right]
+    gripper_left = gripper.copy()
+    gripper_right = gripper.copy()
+    combined_joint_pos = np.hstack([joint_pos, gripper_left.reshape(-1, 1), gripper_right.reshape(-1, 1)]).astype(np.float32)
+
+    ## joint action is different from gripper state
+    joint_actions = gripper.copy() if "joint_action" not in data else data["joint_action"]
+
+    ## compute estimated joint velocities by finite differencing the joint positions
+    joint_vel = np.zeros_like(joint_pos)
+    joint_vel[:-1] = (joint_pos[1:] - joint_pos[:-1]) / (1.0 / fps)  # Assuming constant time step based on fps
+    ## set the last timestamp to be 0 
+    joint_vel[-1] = 0.0
     
     # 2. Extract image frames from the single video (mapped to camera_left_color)
     if not os.path.exists(video_path):
@@ -47,21 +67,25 @@ def convert_sim_to_hdf5(npz_path, video_path, output_hdf5, fps=15.0):
     with h5py.File(output_hdf5, 'w') as f:
         # Logical timestamps based on 15fps
         f.create_dataset("timestamp", data=np.arange(N) / fps)
+        f.create_dataset("joint_action", data=joint_actions[:N])
         
         obs = f.create_group("observations")
         # Align trajectory length with actual image frames
         obs.create_dataset("ee_pose", data=combined_ee_pose[:N])
+        obs.create_dataset("full_joint_pos", data=combined_joint_pos[:N])
+        obs.create_dataset("joint_pos", data=combined_joint_pos[:N])
+        obs.create_dataset("joint_vel", data=joint_vel[:N])
+        # obs.create_dataset("gripper", data=gripper[:N])
+        
         
         img_group = obs.create_group("images")
         # Core view: store into camera_left_color
         img_group.create_dataset("camera_left_color", data=actual_frames)
         # Placeholder views: store black frames to prevent script errors
-        img_group.create_dataset("camera_front_color", data=dummy_frames)
-        img_group.create_dataset("camera_wrist_color", data=dummy_frames)
+        img_group.create_dataset("camera_front_color", data=actual_frames)
+        img_group.create_dataset("camera_wrist_color", data=actual_frames)
         
-        # Store joint positions if available in NPZ
-        if 'robot_joint_pos' in data:
-            obs.create_dataset("joint_pos", data=data['robot_joint_pos'][:N].astype(np.float32))
+        
 
 def main():
     parser = argparse.ArgumentParser(description="Batch convert Sim NPZ and Single Video to HDF5")
@@ -118,6 +142,6 @@ if __name__ == "__main__":
     main()
 
 # python convert_masquerade_npz_to_hdf5.py \
-#   --input_dir ./rendered_videos_and_actions \
-#   --output_dir /path/to/hdf5_output \
+#   --input_dir /home/t-qimhuang/disk/datasets/rendered_videos_and_actions_02_09 \
+#   --output_dir /home/t-qimhuang/disk/datasets/rendered_videos_and_actions_02_09_hdf5 \
 #   --fps 15.0

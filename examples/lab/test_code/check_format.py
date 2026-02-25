@@ -315,7 +315,8 @@ def print_all_joint_actions(h5_path, key="joint_action"):
 
 
 if __name__ == "__main__":
-    path = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point/orange_cube/episode_0.hdf5"
+    path = "/home/t-qimhuang/disk/datasets/rendered_videos_and_actions_02_09_hdf5/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point/orange_cube/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk2/labdata_test/pick_and_place/episode_0.hdf5"
     print_hdf5_structure_with_examples(path)
     # plot_ee_trajectory_and_pose(
