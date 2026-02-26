@@ -1,11 +1,22 @@
 # cd /home/showlab/VLASafety/openpi-main/examples/lab
 
+
+# ----------------------------------------------------------------------------
+## orange cube baseline dataset with 25 episodes, it uses three camera views
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/lab_training_orange_cube_single_point_three_views_1999"
+# ----------------------------------------------------------------------------
+
+
 # ----------------------------------------------------------------------------
 ## orange cube baseline dataset with 25 episodes, it uses front camera
+## this one only has two views
 CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
 MODEL_NAME="$CKPT_CFG/1999"
 ROOT_PATH="/home/eva-01/code/openpi/checkpoints/lab_training_orange_cube_single_point"
 # ----------------------------------------------------------------------------
+
 
 # ----------------------------------------------------------------------------
 ## test tube moving with 40 episodes.
