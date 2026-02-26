@@ -34,15 +34,23 @@ from PIL import Image
 NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 
 
-## reduce demonstration number to 10
-REPO_NAME = "ceilingfan456/lab_data_matched_fake_real_dataset"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data"
+## use a mix of teleoperate and generated data. 
+# REPO_NAME = "ceilingfan456/lab_data_matched_fake_real_dataset_25_25"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange cube onto the green coaster.",
+#     "Place the orange cube onto the green coaster.",
+# ]
+# NUM_EPISODES = [25, 25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+
+
+## reduce demonstration number to 15
+REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_15"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
 LIST_OF_TASK_DESCRIPTIONS = [
     "Place the orange cube onto the green coaster.",
-    "Place the orange cube onto the green coaster.",
 ]
-NUM_EPISODES = [25, 25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
-
+NUM_EPISODES = 15  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 
 
 ## reduce demonstration number to 10
@@ -302,6 +310,9 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     joint_position = joint_poss[frame_idx]  # (7,)
                     gripper_position = gripper_state_normalised[frame_idx]  # (1,)
                     actions = joint_vels[frame_idx]  # (8,)
+                    
+                    ## make sure actions are float32
+                    actions = actions.astype(np.float32)
                     
                     # print("joint_position", type(joint_poss[frame_idx]), np.shape(joint_poss[frame_idx]))
                     # print("gripper_position", type(gripper_action[frame_idx]), np.shape(gripper_action[frame_idx]))

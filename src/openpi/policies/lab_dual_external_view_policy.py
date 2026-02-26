@@ -28,7 +28,7 @@ def _parse_image(image) -> np.ndarray:
 
 
 @dataclasses.dataclass(frozen=True)
-class LabInputs(transforms.DataTransformFn):
+class Lab_dual_external_view_Inputs(transforms.DataTransformFn):
     # Determines which model will be used.
     model_type: _model.ModelType
 
@@ -41,17 +41,16 @@ class LabInputs(transforms.DataTransformFn):
 
         # Possibly need to parse images to uint8 (H,W,C) since LeRobot automatically
         # stores as float32 (C,H,W), gets skipped for policy inference
-        base_image = _parse_image(data["observation/exterior_image_1_left"]) ## chose the camera near the base as the base image to match setup more closely. 
-        wrist_image = _parse_image(data["observation/wrist_image_left"]) ## actual wrist image on our lab robot. 
+        base_image = _parse_image(data["observation/exterior_image_1_left"])
+        wrist_image = _parse_image(data["observation/wrist_image_left"])
         front_view_image = _parse_image(data["observation/exterior_image_2_left"]) ## the camera in front of the robot. 
+
 
         match self.model_type:
             case _model.ModelType.PI0 | _model.ModelType.PI05:
                 names = ("base_0_rgb", "left_wrist_0_rgb", "right_wrist_0_rgb")
-                # images = (base_image, wrist_image, np.zeros_like(base_image))
-                # image_masks = (np.True_, np.True_, np.False_)
-                images = (base_image, wrist_image, front_view_image)
-                image_masks = (np.True_, np.True_, np.True_)
+                images = (base_image, front_view_image, np.zeros_like(base_image))
+                image_masks = (np.True_, np.True_, np.False_)
             case _model.ModelType.PI0_FAST:
                 names = ("base_0_rgb", "base_1_rgb", "wrist_0_rgb")
                 # We don't mask out padding images for FAST models.
@@ -78,7 +77,7 @@ class LabInputs(transforms.DataTransformFn):
 
 
 @dataclasses.dataclass(frozen=True)
-class LabOutputs(transforms.DataTransformFn):
+class Lab_dual_external_view_Outputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Only return the first 8 dims.
         return {"actions": np.asarray(data["actions"][:, :8])}

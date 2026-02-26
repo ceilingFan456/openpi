@@ -21,7 +21,8 @@ import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
-import openpi.policies.lab_policy as lab_policy
+import openpi.policies.lab_dual_external_view_policy as lab_dual_external_view_policy
+import openpi.policies.lab_three_view_policy as lab_three_view_policy
 import openpi.policies.lab_single_base_view_policy as lab_single_base_view_policy
 
 import openpi.shared.download as _download
@@ -466,11 +467,102 @@ class LeRobotDROIDDataConfig(DataConfigFactory):
         )
 
 
+
+
+
+
+
+
+
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
+
+
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotLab_double_view_DataConfig(DataConfigFactory):
+    """
+    Same setting as original DROID dataset with two views. 
+    """
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "observation/exterior_image_1_left": "exterior_image_1_left",
+                        "observation/exterior_image_2_left": "exterior_image_2_left",
+                        "observation/wrist_image_left": "wrist_image_left",
+                        "observation/joint_position": "joint_position",
+                        "observation/gripper_position": "gripper_position",
+                        "actions": "actions",
+                        "prompt": "prompt",
+                    }
+                )
+            ]
+        )
+        # We assume joint *velocity* actions, so we should *not* apply an additional delta transform.
+        data_transforms = _transforms.Group(
+            inputs=[droid_policy.DroidInputs(model_type=model_config.model_type)],
+            outputs=[droid_policy.DroidOutputs()],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+        )
+
+        
+        
+        
+@dataclasses.dataclass(frozen=True)
+class LeRobotLab_dual_external_view_DataConfig(DataConfigFactory):
+    """
+    Two views but both external with no wrist view.  
+    """
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "observation/exterior_image_1_left": "exterior_image_1_left",
+                        "observation/exterior_image_2_left": "exterior_image_2_left",
+                        "observation/wrist_image_left": "wrist_image_left",
+                        "observation/joint_position": "joint_position",
+                        "observation/gripper_position": "gripper_position",
+                        "actions": "actions",
+                        "prompt": "prompt",
+                    }
+                )
+            ]
+        )
+        # We assume joint *velocity* actions, so we should *not* apply an additional delta transform.
+        data_transforms = _transforms.Group(
+            inputs=[lab_dual_external_view_policy.Lab_dual_external_view_Inputs(model_type=model_config.model_type)],
+            outputs=[lab_dual_external_view_policy.Lab_dual_external_view_Outputs()],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+        )
+
+
+
 @dataclasses.dataclass(frozen=True)
 class LeRobotLab_single_base_view_DataConfig(DataConfigFactory):
     """
-    Example data config for custom lab dataset in LeRobot format.
-    To convert your custom DROID dataset (<10s of hours) to LeRobot format, see examples/droid/convert_droid_data_to_lerobot.py
+    Taking a single view which is the base view. mapped to "observation/exterior_image_1_left".
     """
 
     @override
@@ -506,10 +598,9 @@ class LeRobotLab_single_base_view_DataConfig(DataConfigFactory):
 
 
 @dataclasses.dataclass(frozen=True)
-class LeRobotLabDataConfig(DataConfigFactory):
+class LeRobotLab_three_views_DataConfig(DataConfigFactory):
     """
-    Example data config for custom lab dataset in LeRobot format.
-    To convert your custom DROID dataset (<10s of hours) to LeRobot format, see examples/droid/convert_droid_data_to_lerobot.py
+    Taking all three views. setting exterior image 2 left as the right wrist view. 
     """
 
     @override
@@ -531,8 +622,8 @@ class LeRobotLabDataConfig(DataConfigFactory):
         )
         # We assume joint *velocity* actions, so we should *not* apply an additional delta transform.
         data_transforms = _transforms.Group(
-            inputs=[lab_policy.LabInputs(model_type=model_config.model_type)],
-            outputs=[lab_policy.LabOutputs()],
+            inputs=[lab_three_view_policy.Lab_three_view_Inputs(model_type=model_config.model_type)],
+            outputs=[lab_three_view_policy.Lab_three_view_Outputs()],
         )
         model_transforms = ModelTransformFactory()(model_config)
 
@@ -542,6 +633,13 @@ class LeRobotLabDataConfig(DataConfigFactory):
             data_transforms=data_transforms,
             model_transforms=model_transforms,
         )
+
+        
+
+
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
 
 
 @dataclasses.dataclass(frozen=True)
@@ -877,7 +975,7 @@ _CONFIGS = [
             action_dim=32,  # pi05 is trained with 32-dim actions
             action_horizon=16,
         ),
-        data=LeRobotLabDataConfig(
+        data=LeRobotLab_double_view_DataConfig(
             # Replace with your custom DROID LeRobot dataset repo id.
             repo_id="ceilingfan456/lab_data_test",
             base_config=DataConfig(prompt_from_task=True),
@@ -892,6 +990,16 @@ _CONFIGS = [
         batch_size=12,
     ),
 
+
+
+
+
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
+
+
+
     TrainConfig(
         # This config is for fine-tuning pi05-DROID on a custom (smaller) DROID dataset.
         # Here, we use LeRobot data format (like for all other fine-tuning examples)
@@ -902,7 +1010,58 @@ _CONFIGS = [
             action_dim=32,  # pi05 is trained with 32-dim actions
             action_horizon=16,
         ),
-        data=LeRobotLabDataConfig(
+        data=LeRobotLab_double_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=2_000,
+        batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
+    ),
+
+    
+    TrainConfig(
+        # this is for dual external views. no wrist view. 
+        ## still using the 25 datasets.
+        name="pi05_lab_finetune_orange_cube_single_point_dual_external_views",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotLab_dual_external_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=2_000,
+        batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
+    ),
+    
+
+    TrainConfig(
+        # This config is for fine-tuning pi05-DROID on a custom (smaller) DROID dataset.
+        # Here, we use LeRobot data format (like for all other fine-tuning examples)
+        # To convert your custom DROID dataset (<10s of hours) to LeRobot format, see examples/droid/convert_droid_data_to_lerobot.py
+        name="pi05_lab_finetune_orange_cube_single_point_three_views",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotLab_three_views_DataConfig(
             # Replace with your custom DROID LeRobot dataset repo id.
             repo_id="ceilingfan456/lab_data_orange_cube_single_point",
             base_config=DataConfig(prompt_from_task=True),
@@ -925,7 +1084,7 @@ _CONFIGS = [
             action_dim=32,  # pi05 is trained with 32-dim actions
             action_horizon=16,
         ),
-        data=LeRobotLabDataConfig(
+        data=LeRobotLab_double_view_DataConfig(
             # Replace with your custom DROID LeRobot dataset repo id.
             repo_id="ceilingfan456/lab_data_orange_cube_single_point_10",
             base_config=DataConfig(prompt_from_task=True),
@@ -937,11 +1096,59 @@ _CONFIGS = [
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
         num_train_steps=2_000,
-        batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
+        batch_size=12, ## 2K * 12 / ?K = ? epochs, which should be sufficient for this small dataset
     ),
 
     TrainConfig(
-        # this setup is the orange_cube dataset but with only using the single base view. left camera. 
+        # use only 15 episodes.
+        name="pi05_lab_finetune_orange_cube_single_point_15",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotLab_double_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point_15",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=2_000,
+        batch_size=12, ## 2K * 12 / ?K = ? epochs, which should be sufficient for this small dataset
+    ),
+
+
+    ## TODO: for the training, should we consider using different kind of masking strategy for real and fake data? 
+    # TrainConfig(
+    #     # 25 three-views + 25 generated data. 
+    #     name="pi05_lab_finetune_matched_fake_real_25_25",
+    #     model=pi0_config.Pi0Config(
+    #         pi05=True,
+    #         action_dim=32,  # pi05 is trained with 32-dim actions
+    #         action_horizon=16,
+    #     ),
+    #     data=LeRobotLab_three_views_DataConfig(
+    #         # Replace with your custom DROID LeRobot dataset repo id.
+    #         repo_id="ceilingfan456/lab_data_matched_fake_real_dataset_25_25",
+    #         base_config=DataConfig(prompt_from_task=True),
+    #         assets=AssetsConfig(
+    #             # Important: reuse the original DROID norm stats during fine-tuning!
+    #             assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+    #             asset_id="droid",
+    #         ),
+    #     ),
+    #     weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+    #     num_train_steps=2_000,
+    #     batch_size=12, ## 2K * 12 / 15K = ? epochs, which should be sufficient for this small dataset
+    # ),
+
+    TrainConfig(
+        # this setup is the orange_cube dataset but with only using the single base view. which is observation/exterior_image_1_left.
         name="pi05_lab_finetune_orange_cube_single_point_single_base_view",
         model=pi0_config.Pi0Config(
             pi05=True,
@@ -962,6 +1169,13 @@ _CONFIGS = [
         num_train_steps=2_000,
         batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
     ),
+
+    
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
+###############################################################################################################################################################################################
+
+
     
     #
     # Fine-tuning Aloha configs.
