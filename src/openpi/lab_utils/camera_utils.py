@@ -23,7 +23,7 @@ class RealSenseCamera:
         height: int = 480,
         fps: int = 30,
         enable_depth: bool = False,
-        max_retries: int = 5,
+        max_retries: int = 3,
         retry_delay: float = 2.0,
         powerline_frequency: str = "50Hz",
     ):
@@ -185,6 +185,12 @@ def list_realsense_devices() -> list[dict]:
     
     device_list = []
     for dev in devices:
+        ## wrist camera needs to be reset before using. 
+        if dev.get_info(rs.camera_info.serial_number) == '218622273043':
+            dev.hardware_reset()
+            print("Waiting 5 seconds to reset wrist camera and wait for it to reboot...")
+            time.sleep(5)
+
         info = {
             'serial_number': dev.get_info(rs.camera_info.serial_number),
             'name': dev.get_info(rs.camera_info.name),
