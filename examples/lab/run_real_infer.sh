@@ -1,24 +1,84 @@
 # cd /home/showlab/VLASafety/openpi-main/examples/lab
 
 
+
+
+############### experiments on views  #########################
+
+
 # ----------------------------------------------------------------------------
-## orange cube baseline dataset with 25 episodes, it uses three camera views
-# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
+## experiment 6
+## comparison with experiment 2 to see whether we can train with three views.
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_dual_external_views"
 # MODEL_NAME="$CKPT_CFG/1999"
-# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/lab_training_orange_cube_single_point_three_views_1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_dual_external_views_02_27"
 # ----------------------------------------------------------------------------
 
 
 # ----------------------------------------------------------------------------
-## orange cube baseline dataset with 25 episodes, it uses front camera
-## this one only has two views
+## experiment 5
+## comparison with experiment 2 to see whether we can train with three views.
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_three_views"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_three_views_02_27"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+
+############### experiments on num of demonstrations #########################
+
+
+# ----------------------------------------------------------------------------
+## experiment 4
+## comparison with experiment 2 to see how much training demonstrations we need.  
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_15"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_15_02_27"
+# ----------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------
+## experiment 3
+## comparison with experiment 2 to see how much training demonstrations we need.  
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_10"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_10_02_27"
+# ----------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------
+## experiment 2
+## retrain of the original dataset with the new code for sanity chceks.
 CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
 MODEL_NAME="$CKPT_CFG/1999"
-ROOT_PATH="/home/eva-01/code/openpi/checkpoints/lab_training_orange_cube_single_point"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_02_27"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+############### some baseline experiments #########################
+
+
+# ----------------------------------------------------------------------------
+## experiment 1
+## this one has been used as a snaity check baseline
+## orange cube baseline dataset with 25 episodes, it uses front camera
+## this one only has two views
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/lab_training_orange_cube_single_point"
 # ----------------------------------------------------------------------------
 
 
 # ----------------------------------------------------------------------------
+## experiment 0 
 ## test tube moving with 40 episodes.
 ## it uses side camera
 # CKPT_CFG="pi05_lab_finetune"
