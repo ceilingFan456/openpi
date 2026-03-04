@@ -1,5 +1,5 @@
 import abc
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 import dataclasses
 import enum
 import logging
@@ -281,13 +281,29 @@ class BaseModelConfig(abc.ABC):
     def create(self, rng: at.KeyArrayLike) -> "BaseModel":
         """Create a new model, initializing parameters."""
 
-    def load(self, params: at.Params, *, remove_extra_params: bool = True) -> "BaseModel":
+    def load(
+        self,
+        params: at.Params,
+        *,
+        remove_extra_params: bool = True,
+        initialize_missing_params: bool = False,
+    ) -> "BaseModel":
         """Create a model with the given parameters."""
         model = nnx.eval_shape(self.create, jax.random.key(0))
         graphdef, state = nnx.split(model)
+        expected_params = state.to_pure_dict()
         if remove_extra_params:
-            params = ocp.transform_utils.intersect_trees(state.to_pure_dict(), params)
-        at.check_pytree_equality(expected=state.to_pure_dict(), got=params, check_shapes=True, check_dtypes=False)
+            params = ocp.transform_utils.intersect_trees(expected_params, params)
+        if initialize_missing_params:
+            missing_paths = _collect_missing_paths(expected_params, params)
+            if missing_paths:
+                logger.warning(
+                    "Checkpoint is missing %d parameter subtree(s). Initializing missing weights from model defaults: %s",
+                    len(missing_paths),
+                    ", ".join(missing_paths[:8]) + (" ..." if len(missing_paths) > 8 else ""),
+                )
+            params = _merge_missing_params(expected_params, params)
+        at.check_pytree_equality(expected=expected_params, got=params, check_shapes=True, check_dtypes=False)
         state.replace_by_pure_dict(params)
         return nnx.merge(graphdef, state)
 
@@ -381,3 +397,34 @@ def restore_params(
     if all(kp[-1] == "value" for kp in flat_params):
         flat_params = {kp[:-1]: v for kp, v in flat_params.items()}
     return traverse_util.unflatten_dict(flat_params)
+
+
+def _collect_missing_paths(expected: object, got: object, prefix: str = "") -> list[str]:
+    """Returns keypaths present in expected but missing in got."""
+    if isinstance(expected, Mapping):
+        if not isinstance(got, Mapping):
+            return [prefix or "<root>"]
+        missing = []
+        for key, value in expected.items():
+            key_path = f"{prefix}.{key}" if prefix else str(key)
+            if key not in got:
+                missing.append(key_path)
+            else:
+                missing.extend(_collect_missing_paths(value, got[key], key_path))
+        return missing
+    return []
+
+
+def _merge_missing_params(expected: object, got: object) -> object:
+    """Recursively fills params missing from `got` using initialized values from `expected`."""
+    if isinstance(expected, Mapping):
+        if not isinstance(got, Mapping):
+            return expected
+        merged = {}
+        for key, expected_value in expected.items():
+            if key in got:
+                merged[key] = _merge_missing_params(expected_value, got[key])
+            else:
+                merged[key] = expected_value
+        return merged
+    return got

@@ -12,6 +12,40 @@
 # ----------------------------------------------------------------------------
 
 
+
+############### experiments on 0 shot  #########################
+
+
+# ----------------------------------------------------------------------------
+## experiment 8
+## trying to zero shot on pi0.5_base
+## observations: really bad and without any trend to do the task.
+## 
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_dual_external_views"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_dual_external_views_02_27"
+
+# python /home/eva-01/code/openpi/examples/lab/main_pi05.py --checkpoint-name "pi05_lab_finetune_orange_cube_single_point" --checkpoint-path "/home/eva-01/code/openpi/checkpoints/pi05_base" --nuc-ip 192.168.1.112 --external-camera 317222075319 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel
+# ----------------------------------------------------------------------------
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 9
+## trying to zero shot on pi0.5_base
+## observations: really bad but with trend to do the correct task.
+## 
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_dual_external_views"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_dual_external_views_02_27"
+
+# python /home/eva-01/code/openpi/examples/lab/main_pi05.py --checkpoint-name "pi05_lab_finetune_orange_cube_single_point" --checkpoint-path "/home/eva-01/code/openpi/checkpoints/pi05_droid" --nuc-ip 192.168.1.112 --external-camera 317222075319 --wrist-camera 218622273043 --left-camera 336222073740 --control-mode joint_vel
+# ----------------------------------------------------------------------------
+
+
+
+
+
 ############### experiments on views  #########################
 
 
