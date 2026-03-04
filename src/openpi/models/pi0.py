@@ -67,8 +67,14 @@ class Pi0(_model.BaseModel):
     def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs):
         super().__init__(config.action_dim, config.action_horizon, config.max_token_len)
         self.pi05 = config.pi05
+        self.enable_aux_2d = config.enable_aux_2d
+        self.aux_2d_weight = config.aux_2d_weight
+        self.policy_weight = config.policy_weight
+        self.aux_horizon = int(config.aux_horizon)
         paligemma_config = _gemma.get_config(config.paligemma_variant)
         action_expert_config = _gemma.get_config(config.action_expert_variant)
+        ## keep this for language input for the 2d-auxiliary head mlp to do film. 
+        self._paligemma_width = paligemma_config.width
         # TODO: rewrite gemma in NNX. For now, use bridge.
         llm = nnx_bridge.ToNNX(
             _gemma.Module(
@@ -98,6 +104,13 @@ class Pi0(_model.BaseModel):
             self.action_time_mlp_in = nnx.Linear(2 * action_expert_config.width, action_expert_config.width, rngs=rngs)
             self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
+        # Small FiLM-conditioned head for auxiliary 2D waypoint prediction.
+        self.aux_lang_proj = nnx.Linear(self._paligemma_width, config.aux_mlp_dim, rngs=rngs)
+        self.aux_vision_proj = nnx.Linear(self._paligemma_width, config.aux_mlp_dim, rngs=rngs)
+        self.aux_film_gamma = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
+        self.aux_film_beta = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
+        self.aux_head_hidden = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
+        self.aux_head_out = nnx.Linear(config.aux_mlp_dim, 2 * self.aux_horizon, rngs=rngs)
 
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
@@ -185,6 +198,54 @@ class Pi0(_model.BaseModel):
         ar_mask = jnp.array(ar_mask)
         return tokens, input_mask, ar_mask, adarms_cond
 
+    ## new function to generate auxiliary 2d predictions and do film before the auxiliary head mlp.
+    ## pooled vision features from image tokens.
+    ## pooled language embeddings from prompt tokens. 
+    ## film modulation + mlp head -> [b, aux_horizon, 2] predicted 2d waypoints. 
+    def _compute_aux_predictions(
+        self, observation: _model.Observation, *, train: bool
+    ) -> tuple[at.Float[at.Array, "b h 2"], at.Bool[at.Array, " b"]]:
+        """Predicts future 2D waypoints from vision features, FiLM-conditioned on language."""
+        vision_features = []
+        vision_feature_masks = []
+        for name in observation.images:
+            image_tokens, _ = self.PaliGemma.img(observation.images[name], train=train)
+            # Pool token features per image stream, then combine streams.
+            vision_features.append(jnp.mean(image_tokens, axis=1))
+            vision_feature_masks.append(observation.image_masks[name].astype(jnp.float32)[:, None])
+
+        # Weighted mean over image streams with image validity masks.
+        stacked_vision = jnp.stack(vision_features, axis=1)
+        stacked_vision_mask = jnp.stack(vision_feature_masks, axis=1)
+        pooled_vision = jnp.sum(stacked_vision * stacked_vision_mask, axis=1) / jnp.clip(
+            jnp.sum(stacked_vision_mask, axis=1), a_min=1.0
+        )
+
+        if observation.tokenized_prompt is not None and observation.tokenized_prompt_mask is not None:
+            lang_tokens = self.PaliGemma.llm(observation.tokenized_prompt, method="embed")
+            lang_mask = observation.tokenized_prompt_mask.astype(jnp.float32)[..., None]
+            pooled_lang = jnp.sum(lang_tokens * lang_mask, axis=1) / jnp.clip(jnp.sum(lang_mask, axis=1), a_min=1.0)
+        else:
+            pooled_lang = jnp.zeros((pooled_vision.shape[0], self._paligemma_width), dtype=pooled_vision.dtype)
+
+        # FiLM modulation: modulate vision features with language context.
+        aux_vis = self.aux_vision_proj(pooled_vision)
+        aux_lang = self.aux_lang_proj(pooled_lang)
+        gamma = self.aux_film_gamma(aux_lang)
+        beta = self.aux_film_beta(aux_lang)
+        fused = aux_vis * (1.0 + gamma) + beta
+        fused = nnx.swish(fused)
+        fused = self.aux_head_hidden(fused)
+        fused = nnx.swish(fused)
+        pred = self.aux_head_out(fused)
+        pred = pred.reshape(pred.shape[0], self.aux_horizon, 2)
+
+        if observation.use_auxiliary is None:
+            use_aux = jnp.zeros((pred.shape[0],), dtype=bool)
+        else:
+            use_aux = observation.use_auxiliary.astype(bool)
+        return pred, use_aux
+
     @override
     def compute_loss(
         self, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions, *, train: bool = False
@@ -210,8 +271,40 @@ class Pi0(_model.BaseModel):
             [prefix_tokens, suffix_tokens], mask=attn_mask, positions=positions, adarms_cond=[None, adarms_cond]
         )
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
+        policy_loss = jnp.mean(jnp.square(v_t - u_t), axis=-1)
 
-        return jnp.mean(jnp.square(v_t - u_t), axis=-1)
+        # Gate policy loss on a per-sample basis. If no gate is provided, keep legacy behavior (all enabled).
+        ## so use the boolean `use_policy` field in the observation as a filter for the policy loss. 
+        ## so it is operated on a per-sample basis not per-batch basis. 
+        if observation.use_policy is None:
+            policy_gate = jnp.ones((policy_loss.shape[0],), dtype=policy_loss.dtype)
+        else:
+            policy_gate = observation.use_policy.astype(policy_loss.dtype)
+        total_loss = self.policy_weight * (policy_loss * policy_gate[:, None])
+
+        if self.enable_aux_2d and observation.aux_keypoints_2d is not None:
+            pred_2d, aux_gate = self._compute_aux_predictions(observation, train=train)
+            target_2d = observation.aux_keypoints_2d
+            ## sanity check to make sure the dataset matches the model config.
+            if target_2d.shape[1] != self.aux_horizon:
+                raise ValueError(
+                    f"aux_keypoints_2d has horizon {target_2d.shape[1]} but model aux_horizon is {self.aux_horizon}"
+                )
+
+            # If no waypoint mask is provided, treat all waypoints as valid.
+            if observation.aux_keypoints_mask is None:
+                point_mask = jnp.ones((target_2d.shape[0], target_2d.shape[1]), dtype=target_2d.dtype)
+            else:
+                point_mask = observation.aux_keypoints_mask.astype(target_2d.dtype)
+
+            ## point mask refers to weather a point is considered for loss,
+            ## aux_gate refers to whether a sample is considered for loss.
+            aux_sq_err = jnp.mean(jnp.square(pred_2d - target_2d), axis=-1) ## mean is along action horizon dimension. 
+            aux_loss_per_sample = jnp.sum(aux_sq_err * point_mask, axis=-1) / jnp.clip(jnp.sum(point_mask, axis=-1), 1.0)
+            aux_loss_per_sample = aux_loss_per_sample * aux_gate.astype(aux_loss_per_sample.dtype)
+            total_loss = total_loss + self.aux_2d_weight * aux_loss_per_sample[:, None]
+
+        return total_loss
 
     @override
     def sample_actions(

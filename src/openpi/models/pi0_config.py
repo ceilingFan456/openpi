@@ -31,12 +31,22 @@ class Pi0Config(_model.BaseModelConfig):
     pi05: bool = False
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
+    # Auxiliary 2D supervision options.
+    enable_aux_2d: bool = False
+    aux_2d_weight: float = 1.0
+    policy_weight: float = 1.0
+    # If None, defaults to action_horizon.
+    aux_horizon: int | None = None
+    # Hidden dimension for the auxiliary FiLM + head MLP.
+    aux_mlp_dim: int = 512
 
     def __post_init__(self):
         if self.max_token_len is None:
             object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
         if self.discrete_state_input is None:
             object.__setattr__(self, "discrete_state_input", self.pi05)
+        if self.aux_horizon is None:
+            object.__setattr__(self, "aux_horizon", self.action_horizon)
 
     @property
     @override

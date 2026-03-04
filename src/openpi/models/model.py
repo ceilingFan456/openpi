@@ -68,6 +68,10 @@ IMAGE_RESOLUTION = (224, 224)
 #     "tokenized_prompt_mask": bool[*b, l],  # Optional, mask for tokenized prompt
 #     "token_ar_mask": int32[*b, l],  # Optional, autoregressive mask for FAST model
 #     "token_loss_mask": bool[*b, l],  # Optional, loss mask for FAST model
+#     "aux_keypoints_2d": float32[*b, h, 2],  # Optional, auxiliary 2D keypoint sequence
+#     "aux_keypoints_mask": bool[*b, h],  # Optional, valid points in aux_keypoints_2d
+#     "use_auxiliary": bool[*b],  # Optional, per-sample gate for auxiliary loss
+#     "use_policy": bool[*b],  # Optional, per-sample gate for policy loss
 #
 #      # Actions data.
 #      "actions": float32[*b ah ad]
@@ -106,6 +110,16 @@ class Observation(Generic[ArrayT]):
     # Token loss mask (for FAST autoregressive model).
     token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
 
+    # Optional auxiliary 2D supervision for vision pretraining/cotraining.
+    # Shape is [*b, aux_horizon, 2], where the last dimension is (x, y).
+    aux_keypoints_2d: at.Float[ArrayT, "*b h 2"] | None = None
+    # Per-waypoint validity mask for the auxiliary 2D supervision.
+    aux_keypoints_mask: at.Bool[ArrayT, "*b h"] | None = None
+    # Per-sample gate for enabling auxiliary loss.
+    use_auxiliary: at.Bool[ArrayT, "*b"] | None = None
+    # Per-sample gate for enabling policy loss.
+    use_policy: at.Bool[ArrayT, "*b"] | None = None
+
     @classmethod
     def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
         """This method defines the mapping between unstructured data (i.e., nested dict) to the structured Observation format."""
@@ -118,6 +132,27 @@ class Observation(Generic[ArrayT]):
                 data["image"][key] = data["image"][key].astype(np.float32) / 255.0 * 2.0 - 1.0
             elif hasattr(data["image"][key], "dtype") and data["image"][key].dtype == torch.uint8:
                 data["image"][key] = data["image"][key].to(torch.float32).permute(0, 3, 1, 2) / 255.0 * 2.0 - 1.0
+
+        batch_shape = data["state"].shape[:-1]
+        # If the dataset does not specify gating fields, default to:
+        # - auxiliary loss disabled (backward compatible with existing datasets)
+        # - policy loss enabled (preserves current training behavior)
+        ## set the corresponding flags for training mode. 
+        ## auxiliary loss for human videos while policy loss for robot demos. 
+        use_auxiliary = data.get("use_auxiliary")
+        if use_auxiliary is None:
+            if torch.is_tensor(data["state"]):
+                use_auxiliary = torch.zeros(batch_shape, dtype=torch.bool)
+            else:
+                use_auxiliary = np.zeros(batch_shape, dtype=bool)
+
+        use_policy = data.get("use_policy")
+        if use_policy is None:
+            if torch.is_tensor(data["state"]):
+                use_policy = torch.ones(batch_shape, dtype=torch.bool)
+            else:
+                use_policy = np.ones(batch_shape, dtype=bool)
+
         return cls(
             images=data["image"],
             image_masks=data["image_mask"],
@@ -126,6 +161,10 @@ class Observation(Generic[ArrayT]):
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
             token_ar_mask=data.get("token_ar_mask"),
             token_loss_mask=data.get("token_loss_mask"),
+            aux_keypoints_2d=data.get("aux_keypoints_2d"),
+            aux_keypoints_mask=data.get("aux_keypoints_mask"),
+            use_auxiliary=use_auxiliary,
+            use_policy=use_policy,
         )
 
     def to_dict(self) -> at.PyTree[ArrayT]:
@@ -205,6 +244,10 @@ def preprocess_observation(
         tokenized_prompt_mask=observation.tokenized_prompt_mask,
         token_ar_mask=observation.token_ar_mask,
         token_loss_mask=observation.token_loss_mask,
+        aux_keypoints_2d=observation.aux_keypoints_2d,
+        aux_keypoints_mask=observation.aux_keypoints_mask,
+        use_auxiliary=observation.use_auxiliary,
+        use_policy=observation.use_policy,
     )
 
 
