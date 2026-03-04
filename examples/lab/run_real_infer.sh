@@ -12,6 +12,66 @@
 # ----------------------------------------------------------------------------
 
 
+############### experiments on longer training  #########################
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 13
+## try running single views for longer time.
+## observations: i think 3k steps are already working. this is really interesting since we can use two external views to train.
+##              6k and 9k are working fine too. this is pretty interesting. since we dont have wrist review. 
+## 
+CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
+MODEL_NAME="$CKPT_CFG/6000"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 12
+## try running two external views for longer time.
+## observations: i think 3k steps are already working. this is really interesting since we can use two external views to train.
+##              6k and 9k are working fine too. this is pretty interesting. since we dont have wrist review. 
+## 
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps"
+# MODEL_NAME="$CKPT_CFG/9000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps"
+# ----------------------------------------------------------------------------
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 11
+## try running two external views for longer time.
+## observations: i think 3k steps are already working. this is really interesting since we can use two external views to train.
+##              6k and 9k are working fine too. this is pretty interesting. since we dont have wrist review. 
+## 
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps"
+# MODEL_NAME="$CKPT_CFG/9000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps"
+# ----------------------------------------------------------------------------
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 10
+## try running three views for longer time.
+## observations: using the 1,2 setting for cameras inside main_pi0.5, 3k steps is aleady working. the 2k version is not working. this is really interesting. 
+##              3k is really good. 9k is already a bit trash. cannot finish the task correctly quite frequently. 
+##              it seems the reason is the black colour patch on the cube?
+## 
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_three_views_10k_steps"
+# MODEL_NAME="$CKPT_CFG/11999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_three_views_10k_steps"
+# ----------------------------------------------------------------------------
+
+
 
 ############### experiments on 0 shot  #########################
 
@@ -140,9 +200,9 @@
 ## this one has been used as a snaity check baseline
 ## orange cube baseline dataset with 25 episodes, it uses front camera
 ## this one only has two views
-CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
-MODEL_NAME="$CKPT_CFG/1999"
-ROOT_PATH="/home/eva-01/code/openpi/checkpoints/baselines/lab_training_orange_cube_single_point"
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point"
+# MODEL_NAME="$CKPT_CFG/1999"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/baselines/lab_training_orange_cube_single_point"
 # ----------------------------------------------------------------------------
 
 
