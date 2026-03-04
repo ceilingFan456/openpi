@@ -821,6 +821,30 @@ _CONFIGS = [
         ),
     ),
     #
+    # Human-only auxiliary 2D pretraining (LeRobot format).
+    ## so basically change the three fields inside pi0_config. 
+    #
+    TrainConfig(
+        name="pi0_aux2d_human",
+        model=pi0_config.Pi0Config(
+            enable_aux_2d=True,
+            aux_2d_weight=1.0,
+            # Human-only pretraining phase: disable policy loss contribution.
+            policy_weight=0.0,
+        ),
+        data=SimpleDataConfig(
+            repo_id="your_hf_username/your_human_lerobot_dataset",
+            # Keep transforms minimal: use dataset keys as-is.
+            data_transforms=lambda _: _transforms.Group(),
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        # Initialize from pi0 base weights.
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
+    #
     # Fine-tuning Libero configs.
     #
     # These train configs define the hyperparameters for fine-tuning the base model on your own dataset.
