@@ -145,6 +145,10 @@ class Observation(Generic[ArrayT]):
                 use_auxiliary = torch.zeros(batch_shape, dtype=torch.bool)
             else:
                 use_auxiliary = np.zeros(batch_shape, dtype=bool)
+        else:
+            # Some datasets store scalar flags with a trailing singleton dim, e.g. [B, 1].
+            if hasattr(use_auxiliary, "shape") and len(use_auxiliary.shape) > 0 and use_auxiliary.shape[-1] == 1:
+                use_auxiliary = use_auxiliary[..., 0]
 
         use_policy = data.get("use_policy")
         if use_policy is None:
@@ -152,6 +156,10 @@ class Observation(Generic[ArrayT]):
                 use_policy = torch.ones(batch_shape, dtype=torch.bool)
             else:
                 use_policy = np.ones(batch_shape, dtype=bool)
+        else:
+            # Some datasets store scalar flags with a trailing singleton dim, e.g. [B, 1].
+            if hasattr(use_policy, "shape") and len(use_policy.shape) > 0 and use_policy.shape[-1] == 1:
+                use_policy = use_policy[..., 0]
 
         return cls(
             images=data["image"],

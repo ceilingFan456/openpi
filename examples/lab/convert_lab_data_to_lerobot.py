@@ -35,22 +35,33 @@ NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific num
 
 
 ## use a mix of teleoperate and generated data. 
-# REPO_NAME = "ceilingfan456/lab_data_matched_fake_real_dataset_25_25"  # Name of the output dataset, also used for the Hugging Face Hub
-# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data"
-# LIST_OF_TASK_DESCRIPTIONS = [
-#     "Place the orange cube onto the green coaster.",
-#     "Place the orange cube onto the green coaster.",
-# ]
-# NUM_EPISODES = [25, 25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+REPO_NAME = "ceilingfan456/lab_data_matched_fake_real_dataset_25_25"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data"
+LIST_OF_TASK_DESCRIPTIONS = [
+    "Place the orange cube onto the green coaster.",
+    "Place the orange cube onto the green coaster.",
+]
+NUM_EPISODES = [25, 25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+# Per-task supervision mode (must align with task folder ordering after sorting).
+# Set manually for now:
+# - use_auxiliary: sample contributes to auxiliary 2D loss.
+# - use_policy: sample contributes to policy loss.
+LIST_OF_SUPERVISION_MODES = [
+    {"use_auxiliary": True, "use_policy": False},
+    {"use_auxiliary": False, "use_policy": True},
+]
+# Dummy auxiliary labels until real 2D labels are wired.
+# Keep mask all-false to avoid training on placeholder values.
+AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
 
 
 ## reduce demonstration number to 15
-REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_15"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
-LIST_OF_TASK_DESCRIPTIONS = [
-    "Place the orange cube onto the green coaster.",
-]
-NUM_EPISODES = 15  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+# REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_15"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange cube onto the green coaster.",
+# ]
+# NUM_EPISODES = 15  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 
 
 ## reduce demonstration number to 10
@@ -202,6 +213,26 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 "shape": (8,),  # We will use joint *velocity* actions here (7D) + gripper position (1D)
                 "names": ["actions"],
             },
+            "aux_keypoints_2d": {
+                "dtype": "float32",
+                "shape": (AUX_HORIZON, 2),
+                "names": ["horizon", "xy"],
+            },
+            "aux_keypoints_mask": {
+                "dtype": "bool",
+                "shape": (AUX_HORIZON,),
+                "names": ["horizon"],
+            },
+            "use_auxiliary": {
+                "dtype": "bool",
+                "shape": (1,),
+                "names": ["flag"],
+            },
+            "use_policy": {
+                "dtype": "bool",
+                "shape": (1,),
+                "names": ["flag"],
+            },
         },
         image_writer_threads=10,
         image_writer_processes=5,
@@ -237,6 +268,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
     task_dir_paths = sorted(task_dir_paths)  # Sort to ensure consistent ordering
 
     assert len(task_dir_paths) == len(LIST_OF_TASK_DESCRIPTIONS), "Number of task directories does not match number of task descriptions"
+    assert len(task_dir_paths) == len(LIST_OF_SUPERVISION_MODES), "Number of task directories must match supervision modes"
     
     for task_idx, task_dir_path in enumerate(task_dir_paths):
         ## the task directory has all the videos stored in the videos. subdirectory
@@ -289,6 +321,7 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 left_images = f["observations/images/camera_left_color"] ## (287, 480, 640, 3)
                 
                 num_frames = timestamps.shape[0]
+                supervision_mode = LIST_OF_SUPERVISION_MODES[task_idx]
 
                 for frame_idx in range(num_frames):
                     # Read images
@@ -313,6 +346,10 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     
                     ## make sure actions are float32
                     actions = actions.astype(np.float32)
+                    aux_keypoints_2d = np.zeros((AUX_HORIZON, 2), dtype=np.float32)
+                    aux_keypoints_mask = np.zeros((AUX_HORIZON,), dtype=bool)
+                    use_auxiliary = np.asarray([supervision_mode["use_auxiliary"]], dtype=bool)
+                    use_policy = np.asarray([supervision_mode["use_policy"]], dtype=bool)
                     
                     # print("joint_position", type(joint_poss[frame_idx]), np.shape(joint_poss[frame_idx]))
                     # print("gripper_position", type(gripper_action[frame_idx]), np.shape(gripper_action[frame_idx]))
@@ -331,6 +368,11 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                             "gripper_position": gripper_position,
                             "actions": actions,
                             "task": LIST_OF_TASK_DESCRIPTIONS[task_idx],
+                            # Auxiliary supervision fields (schema-consistent placeholders for now).
+                            "aux_keypoints_2d": aux_keypoints_2d,
+                            "aux_keypoints_mask": aux_keypoints_mask,
+                            "use_auxiliary": use_auxiliary,
+                            "use_policy": use_policy,
                             # "prompt": LIST_OF_TASK_DESCRIPTIONS[task_idx], ## TODO figure out if this is the correct way. 
                         }
                     )
