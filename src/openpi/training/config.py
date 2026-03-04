@@ -1049,6 +1049,55 @@ _CONFIGS = [
         num_train_steps=2_000,
         batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
     ),
+
+    TrainConfig(
+        # this is for dual external views. no wrist view. 
+        ## still using the 25 datasets.
+        name="pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotLab_dual_external_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=15_000,
+        keep_period=3_000,
+        batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
+    ),
+
+    TrainConfig(
+        # train three views with more steps to check for performance. 
+        name="pi05_lab_finetune_orange_cube_single_point_three_views_10k_steps",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotLab_three_views_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=12_000,
+        keep_period=3_000, ## keep every 2K steps checkpoint for this longer training run.
+        batch_size=12, ## 12K * 12 / 4K = 36 epochs
+    ),
     
 
     TrainConfig(
@@ -1167,6 +1216,31 @@ _CONFIGS = [
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
         num_train_steps=2_000,
+        batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
+    ),
+
+    
+    TrainConfig(
+        # this setup is the orange_cube dataset but with only using the single base view. which is observation/exterior_image_1_left.
+        name="pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,  # pi05 is trained with 32-dim actions
+            action_horizon=16,
+        ),
+        data=LeRobotLab_single_base_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=15_000,
+        keep_period=3_000, 
         batch_size=12, ## 2K * 12 / 4K = 6 epochs, which should be sufficient for this small dataset
     ),
 

@@ -85,6 +85,13 @@ def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shap
 def init_train_state(
     config: _config.TrainConfig, init_rng: at.KeyArrayLike, mesh: jax.sharding.Mesh, *, resume: bool
 ) -> tuple[training_utils.TrainState, Any]:
+    """Builds the initial train state and its sharding metadata.
+
+    The function always computes the train-state shape and sharding. When `resume` is `True`,
+    it returns `(train_state_shape, state_sharding)` so the caller can restore parameters from
+    a checkpoint. When `resume` is `False`, it initializes model parameters (mixing in any
+    configured pretrained subset) and returns `(train_state, state_sharding)`.
+    """
     tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask=None)
 
     def init(rng: at.KeyArrayLike, partial_params: at.Params | None = None) -> training_utils.TrainState:
@@ -94,6 +101,7 @@ def init_train_state(
 
         # Merge the partial params into the model.
         if partial_params is not None:
+            ## graphdef is the structure of the model, state is the parameters.  
             graphdef, state = nnx.split(model)
             # This will produce an error if the partial params are not a subset of the state.
             state.replace_by_pure_dict(partial_params)
