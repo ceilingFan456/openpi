@@ -821,30 +821,6 @@ _CONFIGS = [
         ),
     ),
     #
-    # Human-only auxiliary 2D pretraining (LeRobot format).
-    ## so basically change the three fields inside pi0_config. 
-    #
-    TrainConfig(
-        name="pi0_aux2d_human",
-        model=pi0_config.Pi0Config(
-            enable_aux_2d=True,
-            aux_2d_weight=1.0,
-            # Human-only pretraining phase: disable policy loss contribution.
-            policy_weight=0.0,
-        ),
-        data=SimpleDataConfig(
-            repo_id="your_hf_username/your_human_lerobot_dataset",
-            # Keep transforms minimal: use dataset keys as-is.
-            data_transforms=lambda _: _transforms.Group(),
-            base_config=DataConfig(
-                prompt_from_task=True,
-            ),
-        ),
-        # Initialize from pi0 base weights.
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=30_000,
-    ),
-    #
     # Fine-tuning Libero configs.
     #
     # These train configs define the hyperparameters for fine-tuning the base model on your own dataset.
@@ -1021,6 +997,37 @@ _CONFIGS = [
 ###############################################################################################################################################################################################
 ###############################################################################################################################################################################################
 ###############################################################################################################################################################################################
+
+    #
+    # Human-only auxiliary 2D pretraining (LeRobot format).
+    ## so basically change the three fields inside pi0_config. 
+    #
+    TrainConfig(
+        name="pi05_aux2d_human",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            enable_aux_2d=True,
+            aux_2d_weight=1.0,
+            # Human-only pretraining phase: disable policy loss contribution.
+            policy_weight=0.0,
+        ),
+        data=LeRobotLab_double_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        # Initialize from pi05-DROID and keep newly introduced aux params from model init.
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_droid/params",
+            missing_regex=".*",
+        ),
+        num_train_steps=30_000,
+    ),
 
 
 

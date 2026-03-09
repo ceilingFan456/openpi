@@ -42,12 +42,19 @@
 # find ./checkpoints/pi05_lab_finetune_orange_cube_single_point_three_views_10k_steps/ -type d -name "train_state" -exec rm -rf {} +
 
 
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train.py pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps \
-    --exp-name=pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps --overwrite
+# XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train.py pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps \
+#     --exp-name=pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps --overwrite
 
-find ./checkpoints/pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps/ -type d -name "train_state" -exec rm -rf {} +
+# find ./checkpoints/pi05_lab_finetune_orange_cube_single_point_dual_external_views_15k_steps/ -type d -name "train_state" -exec rm -rf {} +
 
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train.py pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps \
-    --exp-name=pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps --overwrite
+# XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train.py pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps \
+#     --exp-name=pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps --overwrite
 
-find ./checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps/ -type d -name "train_state" -exec rm -rf {} +
+# find ./checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps/ -type d -name "train_state" -exec rm -rf {} +
+
+
+
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train.py pi05_aux2d_human \
+    --exp-name=pi05_aux2d_human --overwrite
+
+find ./checkpoints/pi05_aux2d_human/ -type d -name "train_state" -exec rm -rf {} +
