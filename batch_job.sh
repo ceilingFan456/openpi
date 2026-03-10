@@ -61,6 +61,7 @@
 
 
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train_eval.py pi05_aux2d_co_training \
-    --exp-name=pi05_aux2d_co_training --overwrite
+  --model.implementation=pi0_aux \
+  --exp-name=pi05_aux2d_co_training --overwrite
 
 find ./checkpoints/pi05_aux2d_co_training/ -type d -name "train_state" -exec rm -rf {} +
