@@ -35,7 +35,7 @@ import openpi.training.weight_loaders as _weight_loaders
 @dataclasses.dataclass(frozen=True)
 class EvalRuntimeConfig:
     val_fraction: float = 0.1
-    val_interval: int = 5
+    val_interval: int = 1000
     val_num_batches: int = 20
     val_seed: int = 0
     eval_use_ema: bool = True
@@ -285,9 +285,47 @@ def create_train_val_loaders(
     data_sharding: jax.sharding.Sharding,
     runtime_cfg: EvalRuntimeConfig,
 ):
+    def _unwrap_hf_dataset(dataset_obj):
+        base = dataset_obj
+        for _ in range(8):
+            if hasattr(base, "hf_dataset"):
+                return base.hf_dataset
+            if hasattr(base, "_dataset"):
+                base = base._dataset
+                continue
+            break
+        return None
+
+    def _to_bool_scalar(x) -> bool:
+        arr = np.asarray(x)
+        if arr.size == 0:
+            return False
+        return bool(arr.reshape(-1)[0])
+
+    def _count_supervision_flags(dataset_obj, indices: np.ndarray) -> tuple[int, int]:
+        hf_dataset = _unwrap_hf_dataset(dataset_obj)
+        if hf_dataset is not None and len(indices) > 0:
+            selected = hf_dataset.select(indices.tolist())
+            aux_count = 0
+            policy_count = 0
+            if "use_auxiliary" in selected.column_names:
+                aux_count = sum(_to_bool_scalar(v) for v in selected["use_auxiliary"])
+            if "use_policy" in selected.column_names:
+                policy_count = sum(_to_bool_scalar(v) for v in selected["use_policy"])
+            return aux_count, policy_count
+
+        # Fallback path for non-HF datasets.
+        aux_count = 0
+        policy_count = 0
+        for i in indices.tolist():
+            item = dataset_obj[int(i)]
+            aux_count += int(_to_bool_scalar(item.get("use_auxiliary", False)))
+            policy_count += int(_to_bool_scalar(item.get("use_policy", True)))
+        return aux_count, policy_count
+
     data_config = config.data.create(config.assets_dirs, config.model)
-    dataset = _data_loader.create_torch_dataset(data_config, config.model.action_horizon, config.model)
-    dataset = _data_loader.transform_dataset(dataset, data_config)
+    raw_dataset = _data_loader.create_torch_dataset(data_config, config.model.action_horizon, config.model)
+    dataset = _data_loader.transform_dataset(raw_dataset, data_config)
 
     dataset_size = len(dataset)
     local_batch_size = config.batch_size // jax.process_count()
@@ -307,6 +345,9 @@ def create_train_val_loaders(
     perm = rng.permutation(dataset_size)
     val_indices = perm[:val_size]
     train_indices = perm[val_size:]
+
+    train_aux_enabled, train_policy_enabled = _count_supervision_flags(raw_dataset, train_indices)
+    val_aux_enabled, val_policy_enabled = _count_supervision_flags(raw_dataset, val_indices)
 
     train_dataset = torch.utils.data.Subset(dataset, train_indices.tolist())
     val_dataset = torch.utils.data.Subset(dataset, val_indices.tolist())
@@ -337,6 +378,10 @@ def create_train_val_loaders(
             "train_size": len(train_dataset),
             "val_size": len(val_dataset),
             "local_batch_size": local_batch_size,
+            "train_aux_enabled": train_aux_enabled,
+            "val_aux_enabled": val_aux_enabled,
+            "train_policy_enabled": train_policy_enabled,
+            "val_policy_enabled": val_policy_enabled,
         },
     )
 
@@ -356,18 +401,33 @@ def run_validation(
         eval_state = dataclasses.replace(train_state, params=train_state.ema_params)
 
     infos = []
+    aux_valid_point_count = 0.0
+    aux_enabled_sample_count = 0.0
     for i, batch in enumerate(val_loader):
+        observation, _ = batch
+        if observation.aux_keypoints_mask is not None:
+            aux_valid_point_count += float(jax.device_get(jnp.sum(observation.aux_keypoints_mask.astype(jnp.float32))))
+        if observation.use_auxiliary is not None:
+            aux_enabled_sample_count += float(jax.device_get(jnp.sum(observation.use_auxiliary.astype(jnp.float32))))
+
         batch_rng = jax.random.fold_in(val_rng, step * 1_000_000 + i)
         with sharding.set_mesh(mesh):
             info = peval_step(batch_rng, eval_state, batch)
         infos.append(info)
 
     if not infos:
-        return {"val/loss": float("nan")}
+        return {
+            "val/loss": float("nan"),
+            "val/aux_valid_point_count": 0.0,
+            "val/aux_enabled_sample_count": 0.0,
+        }
 
     stacked_infos = common_utils.stack_forest(infos)
     reduced_info = jax.device_get(jax.tree.map(jnp.mean, stacked_infos))
-    return {f"val/{k}": float(v) for k, v in reduced_info.items()}
+    out = {f"val/{k}": float(v) for k, v in reduced_info.items()}
+    out["val/aux_valid_point_count"] = float(aux_valid_point_count)
+    out["val/aux_enabled_sample_count"] = float(aux_enabled_sample_count)
+    return out
 
 
 def _to_uint8_rgb(image: np.ndarray) -> np.ndarray:
@@ -413,6 +473,22 @@ def _draw_points_overlay(
     return np.asarray(img)
 
 
+def _letterbox_map_points(points_xy: np.ndarray, source_hw: tuple[int, int], target_hw: tuple[int, int]) -> np.ndarray:
+    source_h, source_w = source_hw
+    target_h, target_w = target_hw
+
+    scale = min(target_w / source_w, target_h / source_h)
+    new_w = int(source_w * scale)
+    new_h = int(source_h * scale)
+    pad_left = (target_w - new_w) // 2
+    pad_top = (target_h - new_h) // 2
+
+    mapped = np.asarray(points_xy, dtype=np.float64).copy()
+    mapped[:, 0] = mapped[:, 0] * scale + pad_left
+    mapped[:, 1] = mapped[:, 1] * scale + pad_top
+    return mapped
+
+
 def build_aux_visualization_log(
     train_state: training_utils.TrainState,
     val_loader: _data_loader.DataLoaderImpl,
@@ -424,7 +500,16 @@ def build_aux_visualization_log(
     if use_ema and train_state.ema_params is not None:
         eval_state = dataclasses.replace(train_state, params=train_state.ema_params)
 
-    batch = next(iter(val_loader))
+    # Choose a random validation batch and sample so overlays are not always from index 0.
+    viz_rng = np.random.default_rng(step)
+    val_iter = iter(val_loader)
+    skip_batches = int(viz_rng.integers(0, 4))
+    batch = next(val_iter)
+    for _ in range(skip_batches):
+        try:
+            batch = next(val_iter)
+        except StopIteration:
+            break
     observation, _ = batch
 
     model = nnx.merge(eval_state.model_def, eval_state.params)
@@ -434,34 +519,77 @@ def build_aux_visualization_log(
     if observation.aux_keypoints_2d is None:
         return {}
 
-    pred_2d, _ = model._compute_aux_predictions(observation, train=False)
-    pred_2d = np.asarray(jax.device_get(pred_2d[0]))
-    gt_2d = np.asarray(jax.device_get(observation.aux_keypoints_2d[0]))
+    pred_2d_all, _ = model._compute_aux_predictions(observation, train=False)
+    batch_size = int(observation.state.shape[0])
+    num_viz = min(5, max(batch_size, 1))
+    sample_indices = viz_rng.choice(batch_size, size=num_viz, replace=False)
 
-    if observation.aux_keypoints_mask is None:
-        valid_mask = np.ones((gt_2d.shape[0],), dtype=bool)
-    else:
-        valid_mask = np.asarray(jax.device_get(observation.aux_keypoints_mask[0])).astype(bool)
+    pred_images: list[wandb.Image] = []
+    gt_images: list[wandb.Image] = []
 
-    image_key = "base_0_rgb" if "base_0_rgb" in observation.images else next(iter(observation.images.keys()))
-    base_image = np.asarray(jax.device_get(observation.images[image_key][0]))
-    base_image = _to_uint8_rgb(base_image)
+    for sample_idx in sample_indices:
+        pred_2d = np.asarray(jax.device_get(pred_2d_all[sample_idx]))
+        gt_2d = np.asarray(jax.device_get(observation.aux_keypoints_2d[sample_idx]))
 
-    h = min(pred_2d.shape[0], gt_2d.shape[0], valid_mask.shape[0])
-    pred_2d = pred_2d[:h]
-    gt_2d = gt_2d[:h]
-    valid_mask = valid_mask[:h]
+        if observation.aux_keypoints_mask is None:
+            valid_mask = np.ones((gt_2d.shape[0],), dtype=bool)
+        else:
+            valid_mask = np.asarray(jax.device_get(observation.aux_keypoints_mask[sample_idx])).astype(bool)
 
-    pred_overlay = _draw_points_overlay(base_image, pred_2d, valid_mask, color=(255, 0, 0))
-    gt_overlay = _draw_points_overlay(base_image, gt_2d, valid_mask, color=(0, 255, 0))
+        image_keys = list(observation.images.keys())
+        if observation.image_masks is not None:
+            valid_image_keys = []
+            for key in image_keys:
+                key_mask = np.asarray(jax.device_get(observation.image_masks[key][sample_idx])).astype(bool)
+                if bool(np.reshape(key_mask, (-1,))[0]):
+                    valid_image_keys.append(key)
+            if valid_image_keys:
+                image_keys = valid_image_keys
+
+        # Auxiliary labels in our lab dataset are projected from the base/front camera.
+        # For correct visualization, prioritize the aligned camera instead of random view selection.
+        if "base_0_rgb" in image_keys:
+            image_key = "base_0_rgb"
+        else:
+            image_key = image_keys[int(viz_rng.integers(0, len(image_keys)))]
+        base_image = np.asarray(jax.device_get(observation.images[image_key][sample_idx]))
+        base_image = _to_uint8_rgb(base_image)
+
+        h = min(pred_2d.shape[0], gt_2d.shape[0], valid_mask.shape[0])
+        pred_2d = pred_2d[:h]
+        gt_2d = gt_2d[:h]
+        valid_mask = valid_mask[:h]
+
+        target_hw = base_image.shape[:2]
+        # Aux labels are generated in converter image space (H,W)=(180,320).
+        source_hw = (180, 320)
+        caption_suffix = ""
+        if target_hw != source_hw:
+            pred_2d = _letterbox_map_points(pred_2d, source_hw, target_hw)
+            gt_2d = _letterbox_map_points(gt_2d, source_hw, target_hw)
+            caption_suffix = (
+                f" (points remapped {source_hw[1]}x{source_hw[0]} -> {target_hw[1]}x{target_hw[0]})"
+            )
+
+        pred_overlay = _draw_points_overlay(base_image, pred_2d, valid_mask, color=(255, 0, 0))
+        gt_overlay = _draw_points_overlay(base_image, gt_2d, valid_mask, color=(0, 255, 0))
+
+        pred_images.append(
+            wandb.Image(
+                pred_overlay,
+                caption=f"step={step} sample={int(sample_idx)} predicted aux 2D points (red) on {image_key}{caption_suffix}",
+            )
+        )
+        gt_images.append(
+            wandb.Image(
+                gt_overlay,
+                caption=f"step={step} sample={int(sample_idx)} ground-truth aux 2D points (green) on {image_key}{caption_suffix}",
+            )
+        )
 
     return {
-        "val/aux_pred_points": wandb.Image(
-            pred_overlay, caption=f"step={step} predicted aux 2D points (red) on {image_key}"
-        ),
-        "val/aux_gt_points": wandb.Image(
-            gt_overlay, caption=f"step={step} ground-truth aux 2D points (green) on {image_key}"
-        ),
+        "val/aux_pred_points": pred_images,
+        "val/aux_gt_points": gt_images,
     }
 
 

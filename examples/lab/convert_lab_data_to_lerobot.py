@@ -117,13 +117,41 @@ import cv2
 import numpy as np
 
 
-FRONT_CAMERA_PROJECTION_MATRIX = np.array(
+def build_projection_matrix_from_c2w(
+    rotation_c2w: np.ndarray,
+    translation_c2w: np.ndarray,
+    intrinsic_3x3: np.ndarray,
+) -> np.ndarray:
+    """Build P = K @ [R|t]_(world->camera) from camera-to-world pose."""
+    t_c2w = np.eye(4, dtype=np.float64)
+    t_c2w[:3, :3] = np.asarray(rotation_c2w, dtype=np.float64)
+    t_c2w[:3, 3] = np.asarray(translation_c2w, dtype=np.float64)
+    e_w2c = np.linalg.inv(t_c2w)[:3, :]
+    return np.asarray(intrinsic_3x3, dtype=np.float64) @ e_w2c
+
+
+# Keep projection constants aligned with examples/lab/test_code/check_format.py.
+FRONT_CAMERA_R_C2W = np.array(
     [
-        [-2.89698510e01, -5.38552983e02, -2.24416404e02, 8.98115396e01],
-        [6.08669489e02, 6.66312478e01, -1.85094781e01, -6.61799033e02],
-        [-4.99620127e-03, 2.17829680e-01, 9.75973380e-01, -2.46876984e-01],
+        [0.02816316, 0.2178868, -0.97556762],
+        [0.99959024, -0.00114196, 0.0286016],
+        [0.00511786, -0.97597338, -0.21782968],
     ],
     dtype=np.float64,
+)
+FRONT_CAMERA_T_C2W = np.array([1.10002696, -0.00701879, 0.2589829], dtype=np.float64)
+FRONT_CAMERA_INTRINSIC_3X3 = np.array(
+    [
+        [607.875, 0.0, 333.961],
+        [0.0, 607.719, 246.486],
+        [0.0, 0.0, 1.0],
+    ],
+    dtype=np.float64,
+)
+FRONT_CAMERA_PROJECTION_MATRIX = build_projection_matrix_from_c2w(
+    FRONT_CAMERA_R_C2W,
+    FRONT_CAMERA_T_C2W,
+    FRONT_CAMERA_INTRINSIC_3X3,
 )
 EE_POSE_CANDIDATE_KEYS = (
     "observations/ee_pose",
@@ -249,6 +277,9 @@ def save_first_frame_sample(
     aux_keypoints_mask,
     use_auxiliary,
     use_policy,
+    raw_front_image=None,
+    raw_aux_keypoints_2d=None,
+    raw_aux_keypoints_mask=None,
 ):
     os.makedirs(sample_dir, exist_ok=True)
 
@@ -278,6 +309,27 @@ def save_first_frame_sample(
         os.path.join(sample_dir, "exterior_image_1_left_with_aux_points.png")
     )
 
+    if (
+        raw_front_image is not None
+        and raw_aux_keypoints_2d is not None
+        and raw_aux_keypoints_mask is not None
+    ):
+        raw_overlay = raw_front_image.copy()
+        for i in range(raw_aux_keypoints_2d.shape[0]):
+            if not raw_aux_keypoints_mask[i]:
+                continue
+            x, y = raw_aux_keypoints_2d[i]
+            cv2.circle(
+                raw_overlay,
+                (int(round(float(x))), int(round(float(y)))),
+                4,
+                (255, 0, 0),
+                -1,
+            )
+        Image.fromarray(raw_overlay).save(
+            os.path.join(sample_dir, "front_raw_with_aux_points.png")
+        )
+
     metadata = {
         "task": task,
         "joint_position": np.asarray(joint_position).tolist(),
@@ -301,6 +353,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
     print(f"Converting raw data from {data_dir} to LeRobot dataset at {output_path}")
     sample_saved = False
     sample_dir = os.path.join(".", "sample_first_added_frame", REPO_NAME)
+    total_frames_processed = 0
+    total_valid_points = 0
 
     # Create LeRobot dataset, define features to store
     # OpenPi assumes that proprio is stored in `state` and actions in `action`
@@ -491,7 +545,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     source_size_hw=front_images.shape[1:3],  # (H, W)
                     target_size_wh=(320, 180),
                 )
+                projected_ee_uv_raw, projected_ee_valid_raw = project_points_with_matrix(
+                    ee_xyz_seq,
+                    FRONT_CAMERA_PROJECTION_MATRIX,
+                )
                 supervision_mode = LIST_OF_SUPERVISION_MODES[task_idx]
+                episode_valid_points = 0
 
                 for frame_idx in range(num_frames):
                     # Read images
@@ -524,6 +583,10 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                             traj_valid[:, None], traj_uv, 0.0
                         ).astype(np.float32)
                         aux_keypoints_mask[:traj_len] = traj_valid
+                    valid_points_this_frame = int(aux_keypoints_mask.sum())
+                    episode_valid_points += valid_points_this_frame
+                    total_valid_points += valid_points_this_frame
+                    total_frames_processed += 1
                     use_auxiliary = np.asarray([supervision_mode["use_auxiliary"]], dtype=bool)
                     use_policy = np.asarray([supervision_mode["use_policy"]], dtype=bool)
                     
@@ -554,6 +617,15 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     )
 
                     if not sample_saved:
+                        raw_aux_keypoints_2d = np.zeros((AUX_HORIZON, 2), dtype=np.float32)
+                        raw_aux_keypoints_mask = np.zeros((AUX_HORIZON,), dtype=bool)
+                        if traj_len > 0:
+                            raw_traj_uv = projected_ee_uv_raw[frame_idx:traj_end]
+                            raw_traj_valid = projected_ee_valid_raw[frame_idx:traj_end]
+                            raw_aux_keypoints_2d[:traj_len] = np.where(
+                                raw_traj_valid[:, None], raw_traj_uv, 0.0
+                            ).astype(np.float32)
+                            raw_aux_keypoints_mask[:traj_len] = raw_traj_valid
                         save_first_frame_sample(
                             str(sample_dir),
                             front_image_resized,
@@ -567,16 +639,34 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                             aux_keypoints_mask,
                             use_auxiliary,
                             use_policy,
+                            raw_front_image=front_image,
+                            raw_aux_keypoints_2d=raw_aux_keypoints_2d,
+                            raw_aux_keypoints_mask=raw_aux_keypoints_mask,
                         )
                         sample_saved = True
                 
                 dataset.save_episode()
+                episode_avg_valid = episode_valid_points / float(num_frames) if num_frames > 0 else 0.0
                 print(f"Added episode {episode_idx} from task {task_idx} with {num_frames} frames.")
+                print(
+                    f"  Avg valid aux points/frame: {episode_avg_valid:.3f} "
+                    f"({episode_valid_points} valid points across {num_frames} frames)"
+                )
 
             ## end of processing for each episode
         ## end of processing for each task.
                     
     # Optionally push to the Hugging Face Hub
+    overall_avg_valid = (
+        total_valid_points / float(total_frames_processed)
+        if total_frames_processed > 0
+        else 0.0
+    )
+    print(
+        f"Overall avg valid aux points/frame: {overall_avg_valid:.3f} "
+        f"({total_valid_points} valid points across {total_frames_processed} frames)"
+    )
+
     if push_to_hub:
         dataset.push_to_hub(
             tags=["panda"],

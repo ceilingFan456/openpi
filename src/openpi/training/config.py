@@ -711,7 +711,7 @@ class TrainConfig:
     num_train_steps: int = 30_000
 
     # How often (in steps) to log training metrics.
-    log_interval: int = 5
+    log_interval: int = 100
     # How often (in steps) to save checkpoints.
     save_interval: int = 1000
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
@@ -1029,8 +1029,10 @@ _CONFIGS = [
         name="pi05_aux2d_co_training",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_horizon=16,
             enable_aux_2d=True,
             aux_2d_weight=1.0,
+            aux_horizon=16,
             # Human-only pretraining phase: disable policy loss contribution.
             policy_weight=1.0,
         ),
@@ -1068,8 +1070,10 @@ _CONFIGS = [
         name="pi05_aux2d_human",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_horizon=16,
             enable_aux_2d=True,
             aux_2d_weight=1.0,
+            aux_horizon=16,
             # Human-only pretraining phase: disable policy loss contribution.
             policy_weight=0.0,
         ),
