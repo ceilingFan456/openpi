@@ -448,6 +448,10 @@ class LeRobotDROIDDataConfig(DataConfigFactory):
                         "observation/gripper_position": "gripper_position",
                         "actions": "actions",
                         "prompt": "prompt",
+                        "aux_keypoints_2d": "aux_keypoints_2d",
+                        "aux_keypoints_mask": "aux_keypoints_mask",
+                        "use_auxiliary": "use_auxiliary",
+                        "use_policy": "use_policy",
                     }
                 )
             ]
@@ -499,6 +503,10 @@ class LeRobotLab_double_view_DataConfig(DataConfigFactory):
                         "observation/gripper_position": "gripper_position",
                         "actions": "actions",
                         "prompt": "prompt",
+                        "aux_keypoints_2d": "aux_keypoints_2d",
+                        "aux_keypoints_mask": "aux_keypoints_mask",
+                        "use_auxiliary": "use_auxiliary",
+                        "use_policy": "use_policy",
                     }
                 )
             ]
@@ -539,6 +547,10 @@ class LeRobotLab_dual_external_view_DataConfig(DataConfigFactory):
                         "observation/gripper_position": "gripper_position",
                         "actions": "actions",
                         "prompt": "prompt",
+                        "aux_keypoints_2d": "aux_keypoints_2d",
+                        "aux_keypoints_mask": "aux_keypoints_mask",
+                        "use_auxiliary": "use_auxiliary",
+                        "use_policy": "use_policy",
                     }
                 )
             ]
@@ -578,6 +590,10 @@ class LeRobotLab_single_base_view_DataConfig(DataConfigFactory):
                         "observation/gripper_position": "gripper_position",
                         "actions": "actions",
                         "prompt": "prompt",
+                        "aux_keypoints_2d": "aux_keypoints_2d",
+                        "aux_keypoints_mask": "aux_keypoints_mask",
+                        "use_auxiliary": "use_auxiliary",
+                        "use_policy": "use_policy",
                     }
                 )
             ]
@@ -616,6 +632,10 @@ class LeRobotLab_three_views_DataConfig(DataConfigFactory):
                         "observation/gripper_position": "gripper_position",
                         "actions": "actions",
                         "prompt": "prompt",
+                        "aux_keypoints_2d": "aux_keypoints_2d",
+                        "aux_keypoints_mask": "aux_keypoints_mask",
+                        "use_auxiliary": "use_auxiliary",
+                        "use_policy": "use_policy",
                     }
                 )
             ]
@@ -691,7 +711,7 @@ class TrainConfig:
     num_train_steps: int = 30_000
 
     # How often (in steps) to log training metrics.
-    log_interval: int = 100
+    log_interval: int = 5
     # How often (in steps) to save checkpoints.
     save_interval: int = 1000
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
@@ -1030,6 +1050,7 @@ _CONFIGS = [
             missing_regex=".*",
         ),
         num_train_steps=24_000,
+        
         keep_period=3_000, ## keep every 2K steps checkpoint for this longer training run.
         batch_size=12, ## 12K * 12 / ?K = ? epochs
     ),

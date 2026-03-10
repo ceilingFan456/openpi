@@ -1,5 +1,5 @@
 import dataclasses
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import flax.nnx as nnx
 import jax
@@ -39,8 +39,6 @@ class Pi0Config(_model.BaseModelConfig):
     aux_horizon: int | None = None
     # Hidden dimension for the auxiliary FiLM + head MLP.
     aux_mlp_dim: int = 512
-    # Select Pi0 implementation module.
-    implementation: Literal["pi0", "pi0_aux"] = "pi0"
 
     def __post_init__(self):
         if self.max_token_len is None:
@@ -59,10 +57,7 @@ class Pi0Config(_model.BaseModelConfig):
 
     @override
     def create(self, rng: at.KeyArrayLike) -> "Pi0":
-        if self.implementation == "pi0_aux":
-            from openpi.models.pi0_aux import Pi0
-        else:
-            from openpi.models.pi0 import Pi0
+        from openpi.models.pi0 import Pi0
 
         return Pi0(self, rngs=nnx.Rngs(rng))
 

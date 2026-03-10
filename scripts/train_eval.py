@@ -35,19 +35,20 @@ import openpi.training.weight_loaders as _weight_loaders
 @dataclasses.dataclass(frozen=True)
 class EvalRuntimeConfig:
     val_fraction: float = 0.1
-    val_interval: int = 1000
+    val_interval: int = 5
     val_num_batches: int = 20
     val_seed: int = 0
     eval_use_ema: bool = True
 
 
 def parse_cli() -> tuple[EvalRuntimeConfig, _config.TrainConfig]:
+    defaults = EvalRuntimeConfig()
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--val-fraction", type=float, default=0.1)
-    parser.add_argument("--val-interval", type=int, default=1000)
-    parser.add_argument("--val-num-batches", type=int, default=20)
-    parser.add_argument("--val-seed", type=int, default=0)
-    parser.add_argument("--eval-use-ema", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--val-fraction", type=float, default=defaults.val_fraction)
+    parser.add_argument("--val-interval", type=int, default=defaults.val_interval)
+    parser.add_argument("--val-num-batches", type=int, default=defaults.val_num_batches)
+    parser.add_argument("--val-seed", type=int, default=defaults.val_seed)
+    parser.add_argument("--eval-use-ema", action=argparse.BooleanOptionalAction, default=defaults.eval_use_ema)
 
     eval_args, remaining = parser.parse_known_args(sys.argv[1:])
     runtime_cfg = EvalRuntimeConfig(
@@ -125,6 +126,12 @@ def init_wandb(
 
     if log_code:
         wandb.run.log_code(epath.Path(__file__).parent.parent)
+
+    # Make step semantics explicit in the UI for both train and validation metrics.
+    wandb.define_metric("global_step")
+    wandb.define_metric("train/*", step_metric="global_step")
+    wandb.define_metric("val/*", step_metric="global_step")
+    wandb.define_metric("split/*", step_metric="global_step")
 
 
 def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shape: at.Params) -> at.Params:
@@ -247,7 +254,30 @@ def eval_step(
     observation, actions = batch
     eval_rng = jax.random.fold_in(rng, state.step)
     chunked_loss = model.compute_loss(eval_rng, observation, actions, train=False)
-    return {"loss": jnp.mean(chunked_loss)}
+    loss_sum = jnp.mean(chunked_loss)
+
+    batch_shape = observation.state.shape[:-1]
+    zero_gate = jnp.zeros(batch_shape, dtype=jnp.bool_)
+
+    # Policy-only contribution (with all auxiliary supervision disabled).
+    policy_only_observation = dataclasses.replace(
+        observation,
+        aux_keypoints_2d=None,
+        aux_keypoints_mask=None,
+        use_auxiliary=zero_gate,
+    )
+    policy_loss = jnp.mean(model.compute_loss(eval_rng, policy_only_observation, actions, train=False))
+
+    # Auxiliary-only contribution (policy term gated off).
+    aux_only_observation = dataclasses.replace(observation, use_policy=zero_gate)
+    aux_loss = jnp.mean(model.compute_loss(eval_rng, aux_only_observation, actions, train=False))
+
+    return {
+        "loss": loss_sum,  # Backward-compatible alias.
+        "loss_sum": loss_sum,
+        "loss_policy": policy_loss,
+        "loss_aux_2d": aux_loss,
+    }
 
 
 def create_train_val_loaders(
@@ -270,6 +300,8 @@ def create_train_val_loaders(
     val_size = int(round(dataset_size * runtime_cfg.val_fraction))
     val_size = max(val_size, local_batch_size)
     val_size = min(val_size, dataset_size - local_batch_size)
+
+    print(f"Dataset size: {dataset_size}, Train size: {dataset_size - val_size}, Val size: {val_size}, Local batch size: {local_batch_size}")
 
     rng = np.random.default_rng(config.seed + runtime_cfg.val_seed)
     perm = rng.permutation(dataset_size)
@@ -475,7 +507,7 @@ def main(runtime_cfg: EvalRuntimeConfig, config: _config.TrainConfig):
         wandb.Image(np.concatenate([np.array(img[i]) for img in batch[0].images.values()], axis=1))
         for i in range(min(5, len(next(iter(batch[0].images.values())))))
     ]
-    wandb.log({"camera_views": images_to_log, **{f"split/{k}": v for k, v in split_info.items()}}, step=0)
+    wandb.log({"global_step": 0, "camera_views": images_to_log, **{f"split/{k}": v for k, v in split_info.items()}}, step=0)
 
     train_state, train_state_sharding = init_train_state(config, init_rng, mesh, resume=resuming)
     jax.block_until_ready(train_state)
@@ -526,9 +558,13 @@ def main(runtime_cfg: EvalRuntimeConfig, config: _config.TrainConfig):
             pbar.write(f"Step {step}: {info_str}")
             wandb.log(
                 {
+                    "global_step": step,
                     **{f"train/{k}": v for k, v in reduced_info.items()},
                     "train/learning_rate": learning_rate,
                     "train/steps_per_sec": steps_per_sec,
+                    # Flat aliases make it easier to find quickly in W&B.
+                    "learning_rate": learning_rate,
+                    "steps_per_sec": steps_per_sec,
                 },
                 step=step,
             )
@@ -556,7 +592,7 @@ def main(runtime_cfg: EvalRuntimeConfig, config: _config.TrainConfig):
                 step=step,
                 use_ema=runtime_cfg.eval_use_ema,
             )
-            wandb.log({**val_metrics, **aux_vis}, step=step)
+            wandb.log({"global_step": step, **val_metrics, **aux_vis}, step=step)
 
         batch = next(train_iter)
 
