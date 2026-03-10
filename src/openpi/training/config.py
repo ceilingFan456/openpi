@@ -1024,7 +1024,11 @@ _CONFIGS = [
                 asset_id="droid",
             ),
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        # Initialize from pi05-DROID and keep newly introduced aux params from model init.
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_droid/params",
+            missing_regex=".*",
+        ),
         num_train_steps=24_000,
         keep_period=3_000, ## keep every 2K steps checkpoint for this longer training run.
         batch_size=12, ## 12K * 12 / ?K = ? epochs
