@@ -455,7 +455,10 @@ def print_all_joint_actions(h5_path, key="joint_action"):
 
 
 if __name__ == "__main__":
-    path = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data/rendered_videos_and_actions_02_25_hdf5/episode_0.hdf5"
+    path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25_rgb/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk2/danze_syn_data/rendered_videos_and_actions_02_25_fixed_hdf5/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data/rendered_videos_and_actions_02_25_hdf5/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk/datasets/danze_data/rendered_videos_and_actions_02_25/rendered_videos_and_actions_02_25_hdf5/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk/datasets/danze_data/phantom_real_02_25/phantom_real_02_25/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk/datasets/rendered_videos_and_actions_02_09_hdf5/episode_0.hdf5"
@@ -474,7 +477,6 @@ if __name__ == "__main__":
     print_all_joint_actions(path, key="joint_action")
 
     ## projection matrix is P = K @ E_world_to_camera.
-    ## Your JSON is camera pose (camera -> world), so invert first.
     R_c2w = np.array([
         [0.02816316,  0.2178868,  -0.97556762],
         [0.99959024, -0.00114196,  0.0286016 ],

@@ -20,6 +20,7 @@ Running this conversion script will take approximately 30 minutes.
 
 from pickle import LIST
 import shutil
+import json
 
 from jax import numpy_dtype_promotion
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
@@ -35,24 +36,44 @@ NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific num
 
 
 ## use a mix of teleoperate and generated data. 
-REPO_NAME = "ceilingfan456/lab_data_matched_fake_real_dataset_25_25"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data"
+REPO_NAME = "ceilingfan456/lab_data_paired_106"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/paired_106"
 LIST_OF_TASK_DESCRIPTIONS = [
     "Place the orange cube onto the green coaster.",
-    "Place the orange cube onto the green coaster.",
 ]
-NUM_EPISODES = [25, 25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+NUM_EPISODES = [25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 # Per-task supervision mode (must align with task folder ordering after sorting).
 # Set manually for now:
 # - use_auxiliary: sample contributes to auxiliary 2D loss.
 # - use_policy: sample contributes to policy loss.
 LIST_OF_SUPERVISION_MODES = [
     {"use_auxiliary": True, "use_policy": False},
-    {"use_auxiliary": False, "use_policy": True},
 ]
 # Dummy auxiliary labels until real 2D labels are wired.
 # Keep mask all-false to avoid training on placeholder values.
 AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
+
+
+
+# ## use a mix of teleoperate and generated data. 
+# REPO_NAME = "ceilingfan456/lab_data_matched_fake_real_dataset_25_25"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange cube onto the green coaster.",
+#     "Place the orange cube onto the green coaster.",
+# ]
+# NUM_EPISODES = [25, 25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+# # Per-task supervision mode (must align with task folder ordering after sorting).
+# # Set manually for now:
+# # - use_auxiliary: sample contributes to auxiliary 2D loss.
+# # - use_policy: sample contributes to policy loss.
+# LIST_OF_SUPERVISION_MODES = [
+#     {"use_auxiliary": True, "use_policy": False},
+#     {"use_auxiliary": False, "use_policy": True},
+# ]
+# # Dummy auxiliary labels until real 2D labels are wired.
+# # Keep mask all-false to avoid training on placeholder values.
+# AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
 
 
 ## reduce demonstration number to 15
@@ -92,6 +113,83 @@ AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid 
 
 import cv2
 import numpy as np
+
+
+FRONT_CAMERA_PROJECTION_MATRIX = np.array(
+    [
+        [-2.89698510e01, -5.38552983e02, -2.24416404e02, 8.98115396e01],
+        [6.08669489e02, 6.66312478e01, -1.85094781e01, -6.61799033e02],
+        [-4.99620127e-03, 2.17829680e-01, 9.75973380e-01, -2.46876984e-01],
+    ],
+    dtype=np.float64,
+)
+EE_POSE_CANDIDATE_KEYS = (
+    "observations/ee_pose",
+    "observations/eef_pose",
+    "ee_pose",
+    "eef_pose",
+)
+
+
+def project_points_with_matrix(points_3d, projection_matrix):
+    points_3d = np.asarray(points_3d, dtype=np.float64)
+    proj = np.asarray(projection_matrix, dtype=np.float64)
+    points_h = np.concatenate(
+        [points_3d, np.ones((points_3d.shape[0], 1), dtype=np.float64)], axis=1
+    )
+    projected = (proj @ points_h.T).T
+    denom = projected[:, 2]
+    valid = np.abs(denom) > 1e-9
+
+    uv = np.full((points_3d.shape[0], 2), np.nan, dtype=np.float64)
+    uv[valid] = projected[valid, :2] / denom[valid, None]
+    return uv, valid
+
+
+def project_and_resize_points(points_3d, projection_matrix, source_size_hw, target_size_wh):
+    uv, valid = project_points_with_matrix(points_3d, projection_matrix)
+
+    source_h, source_w = source_size_hw
+    target_w, target_h = target_size_wh
+
+    # Match resize_with_padding transform exactly.
+    scale = min(target_w / source_w, target_h / source_h)
+    new_w = int(source_w * scale)
+    new_h = int(source_h * scale)
+    pad_left = (target_w - new_w) // 2
+    pad_top = (target_h - new_h) // 2
+
+    uv_resized = np.full_like(uv, np.nan, dtype=np.float64)
+    uv_resized[:, 0] = uv[:, 0] * scale + pad_left
+    uv_resized[:, 1] = uv[:, 1] * scale + pad_top
+
+    in_source = (
+        (uv[:, 0] >= 0.0)
+        & (uv[:, 0] < source_w)
+        & (uv[:, 1] >= 0.0)
+        & (uv[:, 1] < source_h)
+    )
+    in_target = (
+        (uv_resized[:, 0] >= 0.0)
+        & (uv_resized[:, 0] < target_w)
+        & (uv_resized[:, 1] >= 0.0)
+        & (uv_resized[:, 1] < target_h)
+    )
+    valid = valid & in_source & in_target
+
+    return uv_resized, valid
+
+
+def get_ee_xyz_sequence(h5_file):
+    for key in EE_POSE_CANDIDATE_KEYS:
+        if key in h5_file:
+            ee_pose = h5_file[key][:]
+            if ee_pose.ndim == 2 and ee_pose.shape[1] >= 3:
+                return ee_pose[:, :3]
+    raise KeyError(
+        f"Could not find EE pose in any of: {EE_POSE_CANDIDATE_KEYS}"
+    )
+
 
 def resize_with_padding(img, target_size, pad_color=(0, 0, 0)):
     """
@@ -136,6 +234,62 @@ def resize_with_padding(img, target_size, pad_color=(0, 0, 0)):
     return padded
 
 
+def save_first_frame_sample(
+    sample_dir,
+    exterior_image_1_left,
+    exterior_image_2_left,
+    wrist_image_left,
+    joint_position,
+    gripper_position,
+    actions,
+    task,
+    aux_keypoints_2d,
+    aux_keypoints_mask,
+    use_auxiliary,
+    use_policy,
+):
+    os.makedirs(sample_dir, exist_ok=True)
+
+    Image.fromarray(exterior_image_1_left).save(
+        os.path.join(sample_dir, "exterior_image_1_left.png")
+    )
+    Image.fromarray(exterior_image_2_left).save(
+        os.path.join(sample_dir, "exterior_image_2_left.png")
+    )
+    Image.fromarray(wrist_image_left).save(
+        os.path.join(sample_dir, "wrist_image_left.png")
+    )
+
+    overlay = exterior_image_2_left.copy()
+    for i in range(aux_keypoints_2d.shape[0]):
+        if not aux_keypoints_mask[i]:
+            continue
+        x, y = aux_keypoints_2d[i]
+        cv2.circle(
+            overlay,
+            (int(round(float(x))), int(round(float(y)))),
+            3,
+            (0, 255, 0),
+            -1,
+        )
+    Image.fromarray(overlay).save(
+        os.path.join(sample_dir, "exterior_image_2_left_with_aux_points.png")
+    )
+
+    metadata = {
+        "task": task,
+        "joint_position": np.asarray(joint_position).tolist(),
+        "gripper_position": np.asarray(gripper_position).tolist(),
+        "actions": np.asarray(actions).tolist(),
+        "aux_keypoints_2d": np.asarray(aux_keypoints_2d).tolist(),
+        "aux_keypoints_mask": np.asarray(aux_keypoints_mask).tolist(),
+        "use_auxiliary": np.asarray(use_auxiliary).tolist(),
+        "use_policy": np.asarray(use_policy).tolist(),
+    }
+    with open(os.path.join(sample_dir, "frame_metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=2)
+
+
 def main(data_dir: str, *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
     output_path = HF_LEROBOT_HOME / REPO_NAME
@@ -143,6 +297,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
         shutil.rmtree(output_path)
 
     print(f"Converting raw data from {data_dir} to LeRobot dataset at {output_path}")
+    sample_saved = False
+    sample_dir = os.path.join(".", "sample_first_added_frame", REPO_NAME)
 
     # Create LeRobot dataset, define features to store
     # OpenPi assumes that proprio is stored in `state` and actions in `action`
@@ -319,8 +475,20 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 wrist_images = f["observations/images/camera_wrist_color"] ## (287, 480, 640, 3)
                 front_images = f["observations/images/camera_front_color"] ## (287, 480, 640, 3)
                 left_images = f["observations/images/camera_left_color"] ## (287, 480, 640, 3)
+                ee_xyz_seq = get_ee_xyz_sequence(f)  # (T, 3)
                 
                 num_frames = timestamps.shape[0]
+                if ee_xyz_seq.shape[0] != num_frames:
+                    raise ValueError(
+                        f"EE pose length ({ee_xyz_seq.shape[0]}) != frame length ({num_frames}) in {hdf5_file_path}"
+                    )
+
+                projected_ee_uv, projected_ee_valid = project_and_resize_points(
+                    ee_xyz_seq,
+                    FRONT_CAMERA_PROJECTION_MATRIX,
+                    source_size_hw=front_images.shape[1:3],  # (H, W)
+                    target_size_wh=(320, 180),
+                )
                 supervision_mode = LIST_OF_SUPERVISION_MODES[task_idx]
 
                 for frame_idx in range(num_frames):
@@ -348,6 +516,15 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     actions = actions.astype(np.float32)
                     aux_keypoints_2d = np.zeros((AUX_HORIZON, 2), dtype=np.float32)
                     aux_keypoints_mask = np.zeros((AUX_HORIZON,), dtype=bool)
+                    traj_end = min(num_frames, frame_idx + AUX_HORIZON)
+                    traj_len = traj_end - frame_idx
+                    if traj_len > 0:
+                        traj_uv = projected_ee_uv[frame_idx:traj_end]
+                        traj_valid = projected_ee_valid[frame_idx:traj_end]
+                        aux_keypoints_2d[:traj_len] = np.where(
+                            traj_valid[:, None], traj_uv, 0.0
+                        ).astype(np.float32)
+                        aux_keypoints_mask[:traj_len] = traj_valid
                     use_auxiliary = np.asarray([supervision_mode["use_auxiliary"]], dtype=bool)
                     use_policy = np.asarray([supervision_mode["use_policy"]], dtype=bool)
                     
@@ -376,6 +553,23 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                             # "prompt": LIST_OF_TASK_DESCRIPTIONS[task_idx], ## TODO figure out if this is the correct way. 
                         }
                     )
+
+                    if not sample_saved:
+                        save_first_frame_sample(
+                            str(sample_dir),
+                            left_image_resized,
+                            front_image_resized,
+                            wrist_image_resized,
+                            joint_position,
+                            gripper_position,
+                            actions,
+                            LIST_OF_TASK_DESCRIPTIONS[task_idx],
+                            aux_keypoints_2d,
+                            aux_keypoints_mask,
+                            use_auxiliary,
+                            use_policy,
+                        )
+                        sample_saved = True
                 
                 dataset.save_episode()
                 print(f"Added episode {episode_idx} from task {task_idx} with {num_frames} frames.")
