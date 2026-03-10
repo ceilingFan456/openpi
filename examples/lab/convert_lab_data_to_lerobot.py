@@ -36,17 +36,19 @@ NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific num
 
 
 ## use a mix of teleoperate and generated data. 
-REPO_NAME = "ceilingfan456/lab_data_paired_106"  # Name of the output dataset, also used for the Hugging Face Hub
+REPO_NAME = "ceilingfan456/lab_data_paired_64"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/paired_106"
 LIST_OF_TASK_DESCRIPTIONS = [
     "Place the orange cube onto the green coaster.",
+    "Place the orange cube onto the green coaster.",
 ]
-NUM_EPISODES = [25]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+NUM_EPISODES = [30, 30]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 # Per-task supervision mode (must align with task folder ordering after sorting).
 # Set manually for now:
 # - use_auxiliary: sample contributes to auxiliary 2D loss.
 # - use_policy: sample contributes to policy loss.
 LIST_OF_SUPERVISION_MODES = [
+    {"use_auxiliary": False, "use_policy": True},
     {"use_auxiliary": True, "use_policy": False},
 ]
 # Dummy auxiliary labels until real 2D labels are wired.
@@ -260,7 +262,7 @@ def save_first_frame_sample(
         os.path.join(sample_dir, "wrist_image_left.png")
     )
 
-    overlay = exterior_image_2_left.copy()
+    overlay = exterior_image_1_left.copy()
     for i in range(aux_keypoints_2d.shape[0]):
         if not aux_keypoints_mask[i]:
             continue
@@ -273,7 +275,7 @@ def save_first_frame_sample(
             -1,
         )
     Image.fromarray(overlay).save(
-        os.path.join(sample_dir, "exterior_image_2_left_with_aux_points.png")
+        os.path.join(sample_dir, "exterior_image_1_left_with_aux_points.png")
     )
 
     metadata = {
@@ -497,9 +499,6 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     left_image = left_images[frame_idx]  # (480, 640, 3)
                     wrist_image = wrist_images[frame_idx]  # (480, 640, 3)
 
-                    # Resize images to (180, 320, 3)
-                    import cv2 ## cv2 uses cartesian order for width and height, which is x and y or width and height.
-
                     # exterior_image_1_resized = cv2.resize(exterior_image_1, (320, 180))
                     # exterior_image_2_resized = cv2.resize(exterior_image_2, (320, 180))
                     # wrist_image_resized = cv2.resize(wrist_image, (320, 180))
@@ -538,8 +537,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
 
                     dataset.add_frame(
                         {
-                            "exterior_image_1_left": left_image_resized, ## need to swap the front and left images to match. 
-                            "exterior_image_2_left": front_image_resized,
+                            "exterior_image_1_left": front_image_resized, ## need to swap the front and left images to match. 
+                            "exterior_image_2_left": left_image_resized,
                             "wrist_image_left": wrist_image_resized,
                             "joint_position": joint_position,
                             "gripper_position": gripper_position,
@@ -557,8 +556,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     if not sample_saved:
                         save_first_frame_sample(
                             str(sample_dir),
-                            left_image_resized,
                             front_image_resized,
+                            left_image_resized,
                             wrist_image_resized,
                             joint_position,
                             gripper_position,

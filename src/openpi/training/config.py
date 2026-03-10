@@ -998,6 +998,43 @@ _CONFIGS = [
 ###############################################################################################################################################################################################
 ###############################################################################################################################################################################################
 
+
+
+
+
+    #
+    # auxiliary 2D co-training (LeRobot format).
+    #
+    TrainConfig(
+        name="pi05_aux2d_co_training",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            enable_aux_2d=True,
+            aux_2d_weight=1.0,
+            # Human-only pretraining phase: disable policy loss contribution.
+            policy_weight=1.0,
+        ),
+        data=LeRobotLab_double_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_paired_64",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=24_000,
+        keep_period=3_000, ## keep every 2K steps checkpoint for this longer training run.
+        batch_size=12, ## 12K * 12 / ?K = ? epochs
+    ),
+
+
+
+
+
+
     #
     # Human-only auxiliary 2D pretraining (LeRobot format).
     ## so basically change the three fields inside pi0_config. 

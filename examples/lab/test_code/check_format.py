@@ -456,6 +456,8 @@ def print_all_joint_actions(h5_path, key="joint_action"):
 
 if __name__ == "__main__":
     path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25_rgb/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/rendered_videos_and_actions_02_25_fixed_hdf5/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25_rgb/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk2/danze_syn_data/rendered_videos_and_actions_02_25_fixed_hdf5/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data/rendered_videos_and_actions_02_25_hdf5/episode_0.hdf5"
