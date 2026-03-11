@@ -60,10 +60,19 @@
 # find ./checkpoints/pi05_aux2d_human/ -type d -name "train_state" -exec rm -rf {} +
 
 
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train_eval.py pi05_aux2d_co_training \
-  --val-interval 5 \
-  --log-interval 5 \
-  --save-interval 1000 \
-  --exp-name=pi05_aux2d_co_training --overwrite
+# XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train_eval.py pi05_aux2d_co_training \
+#   --val-interval 5 \
+#   --log-interval 5 \
+#   --save-interval 1000 \
+#   --exp-name=pi05_aux2d_co_training --overwrite
 
-find ./checkpoints/pi05_aux2d_co_training/ -type d -name "train_state" -exec rm -rf {} +
+# find ./checkpoints/pi05_aux2d_co_training/ -type d -name "train_state" -exec rm -rf {} +
+
+SETUP="pi05_aux2d_co_training_baseline"
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train_eval.py $SETUP \
+  --val-interval 1000 \
+  --log-interval 100 \
+  --save-interval 1000 \
+  --exp-name=$SETUP --overwrite
+
+find ./checkpoints/$SETUP/ -type d -name "train_state" -exec rm -rf {} +
