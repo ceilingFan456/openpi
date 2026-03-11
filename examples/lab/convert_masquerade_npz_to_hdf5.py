@@ -142,6 +142,6 @@ if __name__ == "__main__":
     main()
 
 # python convert_masquerade_npz_to_hdf5.py \
-#   --input_dir /home/t-qimhuang/disk/datasets/danze_data/rendered_videos_and_actions_02_25/rendered_videos_and_actions_02_25 \
-#   --output_dir /home/t-qimhuang/disk/datasets/danze_data/rendered_videos_and_actions_02_25/rendered_videos_and_actions_02_25_hdf5 \
+#   --input_dir /home/t-qimhuang/disk2/danze_syn_data/rendered_videos_and_actions_02_25_fixed \
+#   --output_dir /home/t-qimhuang/disk2/danze_syn_data/rendered_videos_and_actions_02_25_fixed_hdf5 \
 #   --fps 15.0

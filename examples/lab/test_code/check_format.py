@@ -1,6 +1,8 @@
 import h5py
+from idna import intranges_contain
 import numpy as np
 from PIL import Image  # Added for image saving
+from PIL import ImageDraw
 
 def is_image_dataset(name, obj):
     # simple heuristic: image datasets are uint8 and 4D with last dim = 3
@@ -49,6 +51,144 @@ def print_hdf5_structure_with_examples(h5_path):
                         print(f"  example: <could not read> ({e})")
 
         f.visititems(visitor)
+
+
+def project_points_with_matrix(points_3d, projection_matrix):
+    """
+    Project 3D points to image coordinates with a projection matrix.
+
+    Args:
+        points_3d: (N, 3) array.
+        projection_matrix: (3, 4) or (4, 4) array.
+
+    Returns:
+        uv: (N, 2) projected pixel coordinates.
+        valid: (N,) bool mask for numerically valid projections.
+    """
+    points_3d = np.asarray(points_3d, dtype=np.float64)
+    proj = np.asarray(projection_matrix, dtype=np.float64)
+
+    if points_3d.ndim != 2 or points_3d.shape[1] != 3:
+        raise ValueError(f"points_3d must be (N,3), got {points_3d.shape}")
+    if proj.shape not in ((3, 4), (4, 4)):
+        raise ValueError(f"projection_matrix must be (3,4) or (4,4), got {proj.shape}")
+
+    pts_h = np.concatenate([points_3d, np.ones((points_3d.shape[0], 1), dtype=np.float64)], axis=1)
+    p = (proj @ pts_h.T).T
+
+    if proj.shape == (3, 4):
+        denom = p[:, 2]
+        valid = np.abs(denom) > 1e-9
+        uv = np.full((points_3d.shape[0], 2), np.nan, dtype=np.float64)
+        uv[valid] = p[valid, :2] / denom[valid, None]
+        return uv, valid
+
+    # For 4x4 projective transforms, divide by w then use x,y.
+    denom = p[:, 3]
+    valid = np.abs(denom) > 1e-9
+    uv = np.full((points_3d.shape[0], 2), np.nan, dtype=np.float64)
+    uv[valid] = p[valid, :2] / denom[valid, None]
+    return uv, valid
+
+
+def sample_three_frames_and_project_ee_pose(
+    h5_path,
+    view_dataset_name,
+    projection_matrix,
+    pose_dataset_name=None,
+    following_frames=16,
+    output_prefix="projected_ee",
+    seed=None,
+    radius=4,
+):
+    """
+    Pick 3 random start frames from one camera view.
+    For each start frame, overlay a short EE trajectory on that start frame only.
+
+    `following_frames` is the number of overlaid points, including the start frame.
+    """
+    rng = np.random.default_rng(seed)
+
+    if pose_dataset_name is None:
+        pose_name, pose = pick_pose_dataset(h5_path)
+    else:
+        with h5py.File(h5_path, "r") as f:
+            if pose_dataset_name not in f:
+                raise KeyError(f"Pose dataset not found: {pose_dataset_name}")
+            pose = f[pose_dataset_name][:]
+        pose_name = pose_dataset_name
+
+    if pose.ndim != 2 or pose.shape[1] < 3:
+        raise ValueError(f"Expected pose shape (T,>=3), got {pose.shape}")
+
+    ee_xyz = np.asarray(pose[:, :3], dtype=np.float64)
+
+    with h5py.File(h5_path, "r") as f:
+        resolved_view_name = view_dataset_name
+        if resolved_view_name not in f:
+            candidate = f"observations/images/{view_dataset_name}"
+            if candidate in f:
+                resolved_view_name = candidate
+            else:
+                raise KeyError(
+                    "Image dataset not found. Tried "
+                    f"'{view_dataset_name}' and '{candidate}'."
+                )
+        images = f[resolved_view_name]
+
+        if images.ndim != 4 or images.shape[-1] != 3:
+            raise ValueError(f"Expected image dataset shape (T,H,W,3), got {images.shape}")
+
+        T = images.shape[0]
+        if ee_xyz.shape[0] != T:
+            raise ValueError(
+                f"Time dimension mismatch between image frames ({T}) and pose ({ee_xyz.shape[0]})"
+            )
+
+        window_len = max(1, int(following_frames))
+        max_start = max(0, T - window_len)
+        num = min(3, T)
+        start_ids = rng.choice(max_start + 1, size=num, replace=False)
+
+        for start_idx in np.sort(start_ids):
+            end_idx = min(T, start_idx + window_len)
+            base_frame = np.asarray(images[start_idx])
+            h, w = base_frame.shape[:2]
+            img = Image.fromarray(base_frame)
+            draw = ImageDraw.Draw(img)
+
+            frame_ids = np.arange(start_idx, end_idx)
+            xyz_seq = ee_xyz[frame_ids]
+            uv_seq, valid_seq = project_points_with_matrix(xyz_seq, projection_matrix)
+
+            n = len(frame_ids)
+            for i, ((u, v), ok) in enumerate(zip(uv_seq, valid_seq)):
+                if not ok:
+                    continue
+                if not (0 <= u < w and 0 <= v < h):
+                    continue
+
+                # Start is largest, end is smallest.
+                rr = max(1.0, float(radius) * (1.0 - 0.75 * (i / max(1, n - 1))))
+                if i == 0:
+                    color = (0, 255, 0)      # start
+                elif i == n - 1:
+                    color = (255, 0, 0)      # end
+                else:
+                    color = (255, 165, 0)    # middle
+
+                draw.ellipse(
+                    [(u - rr, v - rr), (u + rr, v + rr)],
+                    outline=color,
+                    fill=color,
+                )
+
+            out_name = (
+                f"{output_prefix}_{resolved_view_name.replace('/', '_')}"
+                f"_start_{int(start_idx)}_len_{int(n)}.png"
+            )
+            img.save(out_name)
+            print(f"[PROJECTED] pose={pose_name} saved: {out_name}")
 
 import h5py
 import numpy as np
@@ -315,7 +455,13 @@ def print_all_joint_actions(h5_path, key="joint_action"):
 
 
 if __name__ == "__main__":
-    path = "/home/t-qimhuang/disk/datasets/danze_data/rendered_videos_and_actions_02_25/rendered_videos_and_actions_02_25_hdf5/episode_0.hdf5"
+    path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25_rgb/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/rendered_videos_and_actions_02_25_fixed_hdf5/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25_rgb/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/paired_106/phantom_real_02_25/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk2/danze_syn_data/rendered_videos_and_actions_02_25_fixed_hdf5/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/lab_training_matched_fake_real_data/rendered_videos_and_actions_02_25_hdf5/episode_0.hdf5"
+    # path = "/home/t-qimhuang/disk/datasets/danze_data/rendered_videos_and_actions_02_25/rendered_videos_and_actions_02_25_hdf5/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk/datasets/danze_data/phantom_real_02_25/phantom_real_02_25/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk/datasets/rendered_videos_and_actions_02_09_hdf5/episode_0.hdf5"
     # path = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point/orange_cube/episode_0.hdf5"
@@ -331,3 +477,42 @@ if __name__ == "__main__":
     #     drift_z=0.0,
     # )
     print_all_joint_actions(path, key="joint_action")
+
+    ## projection matrix is P = K @ E_world_to_camera.
+    R_c2w = np.array([
+        [0.02816316,  0.2178868,  -0.97556762],
+        [0.99959024, -0.00114196,  0.0286016 ],
+        [0.00511786, -0.97597338, -0.21782968],
+    ], dtype=np.float64)
+    t_c2w = np.array([1.10002696, -0.00701879, 0.2589829], dtype=np.float64)
+
+    T_c2w = np.eye(4, dtype=np.float64)
+    T_c2w[:3, :3] = R_c2w
+    T_c2w[:3, 3] = t_c2w
+    E_w2c = np.linalg.inv(T_c2w)[:3, :]
+    
+    ## intrinsic matrix. 
+
+    # intrinsic_3x3 = np.array([
+    #     [455.90661621,   0.0,         330.47070312],
+    #     [  0.0,         455.78945923, 184.86445618],
+    #     [  0.0,           0.0,           1.0       ],
+    # ], dtype=np.float64)
+
+    intrinsic_3x3 = np.array([
+        [607.875,   0.0,   333.961],
+        [  0.0,   607.719, 246.486],
+        [  0.0,     0.0,     1.0  ],
+    ], dtype=np.float64)
+
+    ## final projection matrix is K @ E_world_to_camera
+    P = intrinsic_3x3 @ E_w2c
+
+    
+    sample_three_frames_and_project_ee_pose(
+        h5_path=path,
+        view_dataset_name="camera_front_color",  # or full key
+        projection_matrix=P,
+        following_frames=16,
+        seed=0,
+    )

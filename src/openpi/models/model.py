@@ -112,9 +112,9 @@ class Observation(Generic[ArrayT]):
 
     # Optional auxiliary 2D supervision for vision pretraining/cotraining.
     # Shape is [*b, aux_horizon, 2], where the last dimension is (x, y).
-    aux_keypoints_2d: at.Float[ArrayT, "*b h 2"] | None = None
+    aux_keypoints_2d: at.Float[ArrayT, "*b ah 2"] | None = None
     # Per-waypoint validity mask for the auxiliary 2D supervision.
-    aux_keypoints_mask: at.Bool[ArrayT, "*b h"] | None = None
+    aux_keypoints_mask: at.Bool[ArrayT, "*b ah"] | None = None
     # Per-sample gate for enabling auxiliary loss.
     use_auxiliary: at.Bool[ArrayT, "*b"] | None = None
     # Per-sample gate for enabling policy loss.

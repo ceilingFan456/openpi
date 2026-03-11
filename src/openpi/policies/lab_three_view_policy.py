@@ -74,6 +74,10 @@ class Lab_three_view_Inputs(transforms.DataTransformFn):
                 data["prompt"] = data["prompt"].decode("utf-8")
             inputs["prompt"] = data["prompt"]
 
+        for key in ("aux_keypoints_2d", "aux_keypoints_mask", "use_auxiliary", "use_policy"):
+            if key in data:
+                inputs[key] = np.asarray(data[key])
+
         return inputs
 
 
