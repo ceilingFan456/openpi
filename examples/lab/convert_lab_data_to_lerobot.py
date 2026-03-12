@@ -34,26 +34,42 @@ import numpy as np
 from PIL import Image
 NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 
-
-## use a mix of teleoperate and generated data. 
-REPO_NAME = "ceilingfan456/lab_data_paired_64"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/paired_106"
+## 25 demonstrations
+REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_paired_25"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
 LIST_OF_TASK_DESCRIPTIONS = [
     "Place the orange cube onto the green coaster.",
     "Place the orange cube onto the green coaster.",
 ]
-NUM_EPISODES = [30, 30]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
-# Per-task supervision mode (must align with task folder ordering after sorting).
-# Set manually for now:
-# - use_auxiliary: sample contributes to auxiliary 2D loss.
-# - use_policy: sample contributes to policy loss.
+NUM_EPISODES = [25, 25]
 LIST_OF_SUPERVISION_MODES = [
-    {"use_auxiliary": False, "use_policy": True},
-    {"use_auxiliary": True, "use_policy": False},
+    {"use_auxiliary": False, "use_policy": True}, ## orange cube
+    {"use_auxiliary": True, "use_policy": False}, ## rendered_videos_and_actions_02_25_fixed_hdf5
 ]
 # Dummy auxiliary labels until real 2D labels are wired.
 # Keep mask all-false to avoid training on placeholder values.
 AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
+
+
+# ## use a mix of teleoperate and generated data. 
+# REPO_NAME = "ceilingfan456/lab_data_paired_64"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk/datasets/danze_data/paired_106"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange cube onto the green coaster.",
+#     "Place the orange cube onto the green coaster.",
+# ]
+# NUM_EPISODES = [30, 30]  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+# # Per-task supervision mode (must align with task folder ordering after sorting).
+# # Set manually for now:
+# # - use_auxiliary: sample contributes to auxiliary 2D loss.
+# # - use_policy: sample contributes to policy loss.
+# LIST_OF_SUPERVISION_MODES = [
+#     {"use_auxiliary": False, "use_policy": True},
+#     {"use_auxiliary": True, "use_policy": False},
+# ]
+# # Dummy auxiliary labels until real 2D labels are wired.
+# # Keep mask all-false to avoid training on placeholder values.
+# AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
 
 
 

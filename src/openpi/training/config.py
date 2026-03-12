@@ -1021,6 +1021,47 @@ _CONFIGS = [
 
 
 
+
+    #
+    # auxiliary 2D co-training (LeRobot format). this one does the both loading but then uses 0 weight for aux loss. 
+    #
+    TrainConfig(
+        name="pi05_aux2d_co_training_baseline_orange_cube_paired_25",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=16,
+            enable_aux_2d=True,
+            aux_2d_weight=0.0,
+            aux_horizon=16,
+            # Human-only pretraining phase: disable policy loss contribution.
+            policy_weight=1.0,
+        ),
+        data=LeRobotLab_double_view_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/lab_data_orange_cube_single_point_paired_25",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        # Initialize from pi05-DROID and keep newly introduced aux params from model init.
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_droid/params",
+            missing_regex=".*",
+        ),
+        num_train_steps=24_000,
+        
+        keep_period=3_000, ## keep every 2K steps checkpoint for this longer training run.
+        batch_size=12, ## 12K * 12 / ?K = ? epochs
+    ),
+
+
+
+
+
+
     #
     # auxiliary 2D co-training (LeRobot format). this one does the both loading but then uses 0 weight for aux loss. 
     #
