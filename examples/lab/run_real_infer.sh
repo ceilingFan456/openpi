@@ -16,15 +16,30 @@
 
 
 
+
+# ----------------------------------------------------------------------------
+## experiment 14
+## try running single views for longer time.
+## observations: 9k worked for one time, in general it cannot grasp correctly because of the bad depth estimation. since only trained on front view. 
+##              export HYDRA_FULL_ERROR=1 somehow made the performance worse by clamping in midair. need to double check the reason. 
+## 
+CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
+MODEL_NAME="$CKPT_CFG/9000"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps_02"
+# ----------------------------------------------------------------------------
+
+
+
+
+
 # ----------------------------------------------------------------------------
 ## experiment 13
 ## try running single views for longer time.
-## observations: i think 3k steps are already working. this is really interesting since we can use two external views to train.
-##              6k and 9k are working fine too. this is pretty interesting. since we dont have wrist review. 
+## observations: until 6k, it doesnt work. i will train longer to see the result. 
 ## 
-CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
-MODEL_NAME="$CKPT_CFG/6000"
-ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
+# MODEL_NAME="$CKPT_CFG/7000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
 # ----------------------------------------------------------------------------
 
 
