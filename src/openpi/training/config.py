@@ -1028,8 +1028,11 @@ _CONFIGS = [
         name="pi05_yanzhe_grid_5_three_views_30k_steps",
         model=pi0_config.Pi0Config(
             pi05=True,
-            action_dim=32,  # pi05 is trained with 32-dim actions
             action_horizon=16,
+            policy_weight=1.0, # Human-only pretraining phase: disable policy loss contribution.
+            enable_aux_2d=False,
+            aux_2d_weight=0.0,
+            aux_horizon=16,
         ),
         data=LeRobotLab_three_views_DataConfig(
             # Replace with your custom DROID LeRobot dataset repo id.

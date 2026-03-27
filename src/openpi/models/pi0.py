@@ -105,12 +105,13 @@ class Pi0(_model.BaseModel):
             self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
         # Small FiLM-conditioned head for auxiliary 2D waypoint prediction.
-        self.aux_lang_proj = nnx.Linear(self._paligemma_width, config.aux_mlp_dim, rngs=rngs)
-        self.aux_vision_proj = nnx.Linear(self._paligemma_width, config.aux_mlp_dim, rngs=rngs)
-        self.aux_film_gamma = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
-        self.aux_film_beta = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
-        self.aux_head_hidden = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
-        self.aux_head_out = nnx.Linear(config.aux_mlp_dim, 2 * self.aux_horizon, rngs=rngs)
+        if config.enable_aux_2d:
+            self.aux_lang_proj = nnx.Linear(self._paligemma_width, config.aux_mlp_dim, rngs=rngs)
+            self.aux_vision_proj = nnx.Linear(self._paligemma_width, config.aux_mlp_dim, rngs=rngs)
+            self.aux_film_gamma = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
+            self.aux_film_beta = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
+            self.aux_head_hidden = nnx.Linear(config.aux_mlp_dim, config.aux_mlp_dim, rngs=rngs)
+            self.aux_head_out = nnx.Linear(config.aux_mlp_dim, 2 * self.aux_horizon, rngs=rngs)
 
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
