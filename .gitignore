@@ -185,3 +185,6 @@ old_checkpoints/
 .vscode/
 
 sample_first_added_frame/
+
+*.png
+*.json
