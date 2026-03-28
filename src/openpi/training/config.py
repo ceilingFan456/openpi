@@ -1022,6 +1022,36 @@ _CONFIGS = [
 
 
 
+    ## new experiment on yanzhe datset, try three views first, have more data so try to train with more epochs.
+    TrainConfig(
+        # train three views with more steps to check for performance. 
+        name="pi05_yanzhe_grid_5_three_views_30k_steps",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=16,
+            policy_weight=1.0, # Human-only pretraining phase: disable policy loss contribution.
+            enable_aux_2d=False,
+            aux_2d_weight=0.0,
+            aux_horizon=16,
+        ),
+        data=LeRobotLab_three_views_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/yanzhe_build_block",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=30_000,
+        keep_period=3_000, ## keep every 3K steps checkpoint for this longer training run.
+        batch_size=12, ## 30K * 12 / 35K ~= 10 epochs
+    ),
+
+
+
 
 
     #

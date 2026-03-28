@@ -33,22 +33,38 @@ import h5py
 import numpy as np
 from PIL import Image
 NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
+SWAP=False ## whether to swap the front view and left view. 
 
 ## 25 demonstrations
-REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_paired_25"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
+REPO_NAME = "ceilingfan456/yanzhe_build_block"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/yanzhe_build_block"
 LIST_OF_TASK_DESCRIPTIONS = [
-    "Place the orange cube onto the green coaster.",
-    "Place the orange cube onto the green coaster.",
+    "Place the orange block on top of the gray block.",
 ]
-NUM_EPISODES = [25, 25]
+# NUM_EPISODES = [25, 25]
 LIST_OF_SUPERVISION_MODES = [
-    {"use_auxiliary": False, "use_policy": True}, ## orange cube
-    {"use_auxiliary": True, "use_policy": False}, ## rendered_videos_and_actions_02_25_fixed_hdf5
+    {"use_auxiliary": False, "use_policy": True},
 ]
-# Dummy auxiliary labels until real 2D labels are wired.
-# Keep mask all-false to avoid training on placeholder values.
 AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
+SWAP=True ## override the default setup
+
+
+
+# ## 25 demonstrations
+# REPO_NAME = "ceilingfan456/lab_data_orange_cube_single_point_paired_25"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_training_orange_cube_single_point"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange cube onto the green coaster.",
+#     "Place the orange cube onto the green coaster.",
+# ]
+# NUM_EPISODES = [25, 25]
+# LIST_OF_SUPERVISION_MODES = [
+#     {"use_auxiliary": False, "use_policy": True}, ## orange cube
+#     {"use_auxiliary": True, "use_policy": False}, ## rendered_videos_and_actions_02_25_fixed_hdf5
+# ]
+# # Dummy auxiliary labels until real 2D labels are wired.
+# # Keep mask all-false to avoid training on placeholder values.
+# AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
 
 
 # ## use a mix of teleoperate and generated data. 
@@ -613,6 +629,10 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                     # print("left_image_resized", type(left_image_resized), np.shape(left_image_resized))
                     # print("wrist_image_resized", type(wrist_image_resized), np.shape(wrist_image_resized))
                     # print("task description", LIST_OF_TASK_DESCRIPTIONS[task_idx])
+
+                    ## certain datasets has swapped front view and left view during collection. 
+                    if SWAP:
+                        front_image_resized, left_image_resized = left_image_resized, front_image_resized
 
                     dataset.add_frame(
                         {
