@@ -12,6 +12,53 @@
 # ----------------------------------------------------------------------------
 
 
+
+
+
+
+
+
+
+
+
+############### experiments on with three views using yanzhe build-block dataset  #########################
+
+
+# ----------------------------------------------------------------------------
+## experiment 19
+## experiment on 3k -30k steps. but the inference environment is different from training setup. training is white background and white platform. testing if the new full black env. 
+## observations:  3k doesnt work. it is grabbing in front. 12k is really bad, it will stuck and stops moving. 18k is working for one corner.  21k is not working well. it has an offset to the left. 24k has the correct trend but it doenst
+##              know how to close the gripper. this is really interesting. 
+## 
+CKPT_CFG="pi05_yanzhe_grid_5_three_views_30k_steps"
+MODEL_NAME="$CKPT_CFG/21000"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_yanzhe_grid_5_three_views_30k_steps"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ############### experiments on co-training with 2d auxilliary loss  #########################
 
 
@@ -37,9 +84,9 @@
 ## 25-25 training on with no weight on aux-loss, this is the trained on the original dataset 
 ## observations: it is good. can do the job well other than gripper lose connection at the end. meaning the training pipeline has no issue. 
 ## 
-CKPT_CFG="pi05_aux2d_co_training_orange_cube_paired_25"
-MODEL_NAME="$CKPT_CFG/9000"
-ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_aux2d_co_training_orange_cube_paired_25_9000"
+# CKPT_CFG="pi05_aux2d_co_training_orange_cube_paired_25"
+# MODEL_NAME="$CKPT_CFG/9000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_aux2d_co_training_orange_cube_paired_25_9000"
 # ----------------------------------------------------------------------------
 
 
