@@ -12,8 +12,85 @@
 # ----------------------------------------------------------------------------
 
 
-############### experiments on longer training  #########################
+############### experiments on co-training with 2d auxilliary loss  #########################
 
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 18
+## 25-25 training on with no weight on aux-loss, this is the trained on the original dataset 
+## observations: it is good. can do the job well other than gripper lose connection at the end. meaning the training pipeline has no issue. 
+## 
+# CKPT_CFG="pi05_aux2d_co_training_baseline_orange_cube_paired_25"
+# MODEL_NAME="$CKPT_CFG/12000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_aux2d_co_training_baseline_orange_cube_paired_25_12000"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 17
+## 25-25 training on with no weight on aux-loss, this is the trained on the original dataset 
+## observations: it is good. can do the job well other than gripper lose connection at the end. meaning the training pipeline has no issue. 
+## 
+CKPT_CFG="pi05_aux2d_co_training_orange_cube_paired_25"
+MODEL_NAME="$CKPT_CFG/9000"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_aux2d_co_training_orange_cube_paired_25_9000"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 17
+## 25-25 training on with no weight on aux-loss, this is the trained on the original dataset 
+## observations: it is good. can do the job well other than gripper lose connection at the end. meaning the training pipeline has no issue. 
+## 
+# CKPT_CFG="pi05_aux2d_co_training_baseline_orange_cube_paired_25"
+# MODEL_NAME="$CKPT_CFG/9000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_aux2d_co_training_baseline_orange_cube_paired_25_9000"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 16
+## 30-30 training on with no weight on aux-loss
+## observations: 
+## 
+# CKPT_CFG="pi05_aux2d_co_training_baseline"
+# MODEL_NAME="$CKPT_CFG/18000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_aux2d_co_training_baseline_18000"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+
+# ----------------------------------------------------------------------------
+## experiment 15
+## 30-30 euqal weight training on aux-loss and policy-loss
+## observations: not working very well. hope new baseline works
+## 
+# CKPT_CFG="pi05_aux2d_co_training"
+# MODEL_NAME="$CKPT_CFG/7000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_aux2d_co_training_7000"
+# ----------------------------------------------------------------------------
+
+
+
+
+
+
+############### experiments on longer training  #########################
 
 
 
@@ -23,9 +100,9 @@
 ## observations: 9k worked for one time, in general it cannot grasp correctly because of the bad depth estimation. since only trained on front view. 
 ##              export HYDRA_FULL_ERROR=1 somehow made the performance worse by clamping in midair. need to double check the reason. 
 ## 
-CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
-MODEL_NAME="$CKPT_CFG/9000"
-ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps_02"
+# CKPT_CFG="pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps"
+# MODEL_NAME="$CKPT_CFG/9000"
+# ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_lab_finetune_orange_cube_single_point_single_base_view_15k_steps_02"
 # ----------------------------------------------------------------------------
 
 
