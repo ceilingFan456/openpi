@@ -100,7 +100,33 @@
 
 
 
-SETUP="pi05_yanzhe_grid_5_three_views_30k_steps"
+# SETUP="pi05_yanzhe_grid_5_three_views_30k_steps"
+# XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train_eval.py $SETUP \
+#   --val-interval 1000 \
+#   --log-interval 100 \
+#   --save-interval 1000 \
+#   --exp-name=$SETUP --overwrite
+
+# find ./checkpoints/$SETUP/ -type d -name "train_state" -exec rm -rf {} +
+
+
+
+
+
+SETUP="qiming_baseline_new_background_three_views_10k_steps"
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train_eval.py $SETUP \
+  --val-interval 1000 \
+  --log-interval 100 \
+  --save-interval 1000 \
+  --exp-name=$SETUP --overwrite
+
+find ./checkpoints/$SETUP/ -type d -name "train_state" -exec rm -rf {} +
+
+
+
+
+
+SETUP="pick_and_place_new_132_three_views_21k_steps"
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run scripts/train_eval.py $SETUP \
   --val-interval 1000 \
   --log-interval 100 \

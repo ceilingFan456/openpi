@@ -1022,6 +1022,103 @@ _CONFIGS = [
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ## new experiment on my new baseline dataset, try three views first, have more data so try to train with more epochs.
+    TrainConfig(
+        # train three views with more steps to check for performance. 
+        name="pick_and_place_new_132_three_views_21k_steps",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=16,
+            policy_weight=1.0, # Human-only pretraining phase: disable policy loss contribution.
+            enable_aux_2d=False,
+            aux_2d_weight=0.0,
+            aux_horizon=16,
+        ),
+        data=LeRobotLab_three_views_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/pick_and_place_new_132",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=21_000,
+        keep_period=3_000, ## keep every 3K steps checkpoint for this longer training run.
+        batch_size=12, ## 21K * 12 / 40K ~= 6.3 epochs
+    ),
+
+
+
+
+
+
+
+
+
+    ## new experiment on my new baseline dataset, try three views first, have more data so try to train with more epochs.
+    TrainConfig(
+        # train three views with more steps to check for performance. 
+        name="qiming_baseline_new_background_three_views_10k_steps",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=16,
+            policy_weight=1.0, # Human-only pretraining phase: disable policy loss contribution.
+            enable_aux_2d=False,
+            aux_2d_weight=0.0,
+            aux_horizon=16,
+        ),
+        data=LeRobotLab_three_views_DataConfig(
+            # Replace with your custom DROID LeRobot dataset repo id.
+            repo_id="ceilingfan456/qiming_baseline_new_background",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(
+                # Important: reuse the original DROID norm stats during fine-tuning!
+                assets_dir="gs://openpi-assets/checkpoints/pi05_droid/assets",
+                asset_id="droid",
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
+        num_train_steps=10_000,
+        keep_period=2_000, ## keep every 2K steps checkpoint for this longer training run.
+        batch_size=12, ## 10K * 12 / 2.4K ~= 50 epochs
+    ),
+
+
+
+
+
+
+
+
+
+
+
+
+
     ## new experiment on yanzhe datset, try three views first, have more data so try to train with more epochs.
     TrainConfig(
         # train three views with more steps to check for performance. 

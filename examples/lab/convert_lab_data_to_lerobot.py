@@ -35,18 +35,58 @@ from PIL import Image
 NUM_EPISODES = None  # Set to None to use all episodes, or set to a specific number to limit the episodes used for conversion.
 SWAP=False ## whether to swap the front view and left view. 
 
-## 25 demonstrations
-REPO_NAME = "ceilingfan456/yanzhe_build_block"  # Name of the output dataset, also used for the Hugging Face Hub
-RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/yanzhe_build_block"
+
+
+## my own new baseline
+REPO_NAME = "ceilingfan456/pick_and_place_new_132"  # Name of the output dataset, also used for the Hugging Face Hub
+RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/lab_new_dataset"
 LIST_OF_TASK_DESCRIPTIONS = [
-    "Place the orange block on top of the gray block.",
+    "Place the white block on top of the gray block.",
 ]
-# NUM_EPISODES = [25, 25]
+# NUM_EPISODES = [10]
 LIST_OF_SUPERVISION_MODES = [
     {"use_auxiliary": False, "use_policy": True},
 ]
 AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
 SWAP=True ## override the default setup
+
+
+
+
+
+
+## my own new baseline
+# REPO_NAME = "ceilingfan456/qiming_baseline_new_background"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/qiming_grid_5"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange block on top of the gray block.",
+# ]
+# NUM_EPISODES = [10]
+# LIST_OF_SUPERVISION_MODES = [
+#     {"use_auxiliary": False, "use_policy": True},
+# ]
+# AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
+# SWAP=True ## override the default setup
+
+
+
+
+
+
+
+
+# ## 25 demonstrations
+# REPO_NAME = "ceilingfan456/yanzhe_build_block"  # Name of the output dataset, also used for the Hugging Face Hub
+# RAW_DATASET_DIR_PATH = "/home/t-qimhuang/disk2/yanzhe_build_block"
+# LIST_OF_TASK_DESCRIPTIONS = [
+#     "Place the orange block on top of the gray block.",
+# ]
+# # NUM_EPISODES = [25, 25]
+# LIST_OF_SUPERVISION_MODES = [
+#     {"use_auxiliary": False, "use_policy": True},
+# ]
+# AUX_HORIZON = 16 ## keep to the same as action horizon for now. ## a bit stupid but doing "action chunk" for 2d points here is easier for future modification. 
+# SWAP=True ## override the default setup
 
 
 
@@ -510,6 +550,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
 
     ## sort paths
     task_dir_paths = sorted(task_dir_paths)  # Sort to ensure consistent ordering
+
+    print(f"Found task directories: {task_dir_paths}")
 
     assert len(task_dir_paths) == len(LIST_OF_TASK_DESCRIPTIONS), "Number of task directories does not match number of task descriptions"
     assert len(task_dir_paths) == len(LIST_OF_SUPERVISION_MODES), "Number of task directories must match supervision modes"
