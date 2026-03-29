@@ -17,7 +17,8 @@ Usage:
     python main.py --nuc-ip 192.168.1.143 --external-camera <serial>
 """
 
-SINGLE_TASK="Place the orange cube onto the green coaster."
+# SINGLE_TASK="Place the orange cube onto the green coaster."
+SINGLE_TASK="Place the orange block on top of the gray block."
 
 import contextlib
 import datetime
