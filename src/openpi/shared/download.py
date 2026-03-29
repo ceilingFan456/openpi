@@ -6,6 +6,7 @@ import pathlib
 import re
 import shutil
 import stat
+import subprocess
 import time
 import urllib.parse
 
@@ -80,13 +81,19 @@ def maybe_download(url: str, *, force_download: bool = False, **kwargs) -> pathl
                 else:
                     local_path.unlink()
 
-            # Download the data to a local cache.
-            logger.info(f"Downloading {url} to {local_path}")
-            scratch_path = local_path.with_suffix(".partial")
-            _download_fsspec(url, scratch_path, **kwargs)
+            if not local_path.exists():
+                # Download the data to a local cache.
+                logger.info(f"Downloading {url} to {local_path}")
+                scratch_path = local_path.with_suffix(".partial")
+                # Route openpi-assets through gsutil to avoid gcsfs auth issues with this bucket.
+                # All other gs:// URLs (e.g. big_vision) continue to use gcsfs as normal.
+                if parsed.scheme == "gs" and parsed.netloc == "openpi-assets":
+                    _download_gsutil(url, scratch_path, **kwargs)
+                else:
+                    _download_fsspec(url, scratch_path, **kwargs)
 
-            shutil.move(scratch_path, local_path)
-            _ensure_permissions(local_path)
+                shutil.move(scratch_path, local_path)
+                _ensure_permissions(local_path)
 
     except PermissionError as e:
         msg = (
@@ -96,6 +103,21 @@ def maybe_download(url: str, *, force_download: bool = False, **kwargs) -> pathl
         raise PermissionError(msg) from e
 
     return local_path
+
+
+def _download_gsutil(url: str, local_path: pathlib.Path, **kwargs) -> None:
+    """Download a file or directory from GCS using gsutil if available, otherwise fall back to gcsfs."""
+    if shutil.which("gsutil") is None:
+        logger.warning(
+            "gsutil not found, falling back to gcsfs. This may fail if GCP credentials are not configured correctly."
+        )
+        _download_fsspec(url, local_path, **kwargs)
+        return
+    local_path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["gsutil", "-m", "cp", "-r", f"{url}/*", str(local_path)],
+        check=True,
+    )
 
 
 def _download_fsspec(url: str, local_path: pathlib.Path, **kwargs) -> None:

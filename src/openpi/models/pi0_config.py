@@ -40,6 +40,8 @@ class Pi0Config(_model.BaseModelConfig):
     # Hidden dimension for the auxiliary FiLM + head MLP.
     aux_mlp_dim: int = 512
 
+    pytorch_compile_mode: str | None = "max-autotune"
+
     def __post_init__(self):
         if self.max_token_len is None:
             object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
@@ -47,6 +49,13 @@ class Pi0Config(_model.BaseModelConfig):
             object.__setattr__(self, "discrete_state_input", self.pi05)
         if self.aux_horizon is None:
             object.__setattr__(self, "aux_horizon", self.action_horizon)
+        if self.pytorch_compile_mode is not None:
+            assert self.pytorch_compile_mode in [
+                "default",
+                "reduce-overhead",
+                "max-autotune",
+                "max-autotune-no-cudagraphs",
+            ]
 
     @property
     @override
