@@ -1054,7 +1054,7 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
         num_train_steps=30_000,
         keep_period=3_000, ## keep every 3K steps checkpoint for this longer training run.
-        batch_size=12, ## 21K * 12 / 40K ~= 6.3 epochs
+        batch_size=12, ## 30K * 12 / 40K ~= 9.0 epochs, run on 8 gpu with --batch-size=96. which is 72 epochs. 
     ),
 
 
