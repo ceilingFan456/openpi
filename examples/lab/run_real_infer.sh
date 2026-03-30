@@ -17,6 +17,22 @@
 
 
 
+############### experiments on with three views using yanzhe build-block dataset  #########################
+
+
+# ----------------------------------------------------------------------------
+## experiment 20
+## experiment on environment baseline.
+## observations: 
+## 
+CKPT_CFG="pi05_yanzhe_grid_5_three_views_30k_steps"
+MODEL_NAME="$CKPT_CFG/18000"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_yanzhe_grid_5_three_views_30k_steps"
+# ----------------------------------------------------------------------------
+
+
+
+
 
 
 
@@ -27,12 +43,11 @@
 # ----------------------------------------------------------------------------
 ## experiment 19
 ## experiment on 3k -30k steps. but the inference environment is different from training setup. training is white background and white platform. testing if the new full black env. 
-## observations:  3k doesnt work. it is grabbing in front. 12k is really bad, it will stuck and stops moving. 18k is working for one corner.  21k is not working well. it has an offset to the left. 24k has the correct trend but it doenst
-##              know how to close the gripper. this is really interesting. 
+## observations:   
 ## 
-CKPT_CFG="pi05_yanzhe_grid_5_three_views_30k_steps"
-MODEL_NAME="$CKPT_CFG/21000"
-ROOT_PATH="/home/eva-01/code/openpi/checkpoints/pi05_yanzhe_grid_5_three_views_30k_steps"
+CKPT_CFG="qiming_baseline_new_background_three_views_10k_steps"
+MODEL_NAME="$CKPT_CFG/8000"
+ROOT_PATH="/home/eva-01/code/openpi/checkpoints/new_baseline"
 # ----------------------------------------------------------------------------
 
 
