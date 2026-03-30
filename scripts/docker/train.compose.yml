@@ -1,0 +1,45 @@
+# Docker Compose for pi0.5 training.
+#
+# Usage:
+#   # Interactive shell:
+#   docker compose -f scripts/docker/train.compose.yml run --rm openpi_train bash
+#
+#   # Run training directly:
+#   TRAIN_ARGS="pi05_libero --exp-name=my_experiment --overwrite" \
+#     docker compose -f scripts/docker/train.compose.yml up --build
+
+services:
+  openpi_train:
+    image: openpi_train
+    build:
+      context: ../..
+      dockerfile: scripts/docker/train.Dockerfile
+    init: true
+    tty: true
+    stdin_open: true
+    network_mode: host
+    shm_size: "16gb"
+    volumes:
+      - $PWD:/app
+      - ${OPENPI_DATA_HOME:-~/.cache/openpi}:/openpi_assets
+    environment:
+      - TRAIN_ARGS
+      - OPENPI_DATA_HOME=/openpi_assets
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9
+      - WANDB_API_KEY
+    command: >
+      /bin/bash -c "
+        if [ -n \"$$TRAIN_ARGS\" ]; then
+          uv run scripts/train.py $$TRAIN_ARGS;
+        else
+          echo 'No TRAIN_ARGS set. Starting interactive shell.';
+          exec /bin/bash;
+        fi
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

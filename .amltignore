@@ -1,0 +1,17 @@
+# Ignore large/unnecessary directories for AMLT uploads
+.git/
+wandb/
+checkpoints/
+selected_checkpoints/
+google-cloud-sdk/
+third_party/
+assets/
+sample_first_added_frame/
+testing_state_redundancy/results/
+__pycache__/
+*.pyc
+.venv/
+.uv/
+node_modules/
+*.egg-info/
+.ruff_cache/

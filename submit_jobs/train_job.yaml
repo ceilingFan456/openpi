@@ -1,0 +1,63 @@
+description: openpi-pick-place-132-three-views-30k
+
+target:
+  service: sing
+  name: msrresrchbasicvc
+  workspace_name: shared_ws
+
+environment:
+  image: amlt-sing/2.5.0-cuda12.4-cudnn9-devel
+
+code:
+  local_dir: ../
+
+storage:
+  output:
+    storage_account_name: singaporeteamstorage
+    container_name: shared
+    mount_dir: /mnt/default_storage
+
+env_defaults:
+  USER: root
+  AMLT_VULN_SCAN_MODE: "none"
+
+jobs:
+  - name: train_pick_place_30k
+    sku: 141G8-H200-NvLink
+    priority: high
+    sla_tier: basic
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      ## Install system deps
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      ## Install ffmpeg 7 (required by av/PyAV 14.x)
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      ## Install uv
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      ## Install Python deps
+      - git submodule update --init --recursive || true
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      ## Apply transformers patches
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      ## Verify
+      - uv run python -c "import jax; print('JAX devices:', jax.devices())"
+      ## Run training
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pick_and_place_new_132_three_views_30k_steps --exp-name=pick_and_place_new_132_three_views_30k_steps --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=96 --overwrite
+    submit_args:
+      max_run_duration_seconds: 86400
+      env:
+        {
+          AMLT_BLOB_ROOT_DIR: /mnt/default_storage,
+          XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9",
+          WANDB_API_KEY: "e1b1fccedc5a6ad97a728268dc6a13c6bdc9f1ca",
+          WANDB_MODE: "online",
+          _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi",
+        }
