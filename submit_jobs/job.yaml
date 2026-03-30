@@ -34,7 +34,10 @@ jobs:
       - pwd && ls -alh
       - nvidia-smi
       ## Install system deps (sudo for non-root user)
-      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      ## Install ffmpeg 7 (required by av/PyAV 14.x)
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
       - git lfs install
       ## Install uv
       - curl -LsSf https://astral.sh/uv/install.sh | sh
