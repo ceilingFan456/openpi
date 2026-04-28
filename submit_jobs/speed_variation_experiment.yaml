@@ -41,6 +41,7 @@ jobs:
       - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
       - GIT_LFS_SKIP_SMUDGE=1 uv sync
       - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
       - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
       - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
       - uv run python -c "import jax; print('JAX devices:', jax.devices())"
@@ -72,10 +73,11 @@ jobs:
       - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
       - GIT_LFS_SKIP_SMUDGE=1 uv sync
       - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
       - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
       - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
       - mkdir -p /mnt/default_storage/qiming/openpi/eval_results
-      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_blob --exp-name=e1_original_speed_study --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 30000 --save-interval 5000 --log-interval 100
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_blob --exp-name=e1_original_speed_study --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 30000 --save-interval 5000 --log-interval 100 --no-wandb-enabled
     submit_args:
       max_run_duration_seconds: 172800
       env:
@@ -104,7 +106,7 @@ jobs:
       - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
       - GIT_LFS_SKIP_SMUDGE=1 uv sync
       - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
-      - uv pip install scipy
+      - uv pip install "datasets<4" scipy
       - LIBERO_DATASET_ROOT=/mnt/default_storage/qiming/datasets/libero uv run python scripts/data_prep_speed_varied.py
     submit_args:
       max_run_duration_seconds: 43200
@@ -132,11 +134,12 @@ jobs:
       - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
       - GIT_LFS_SKIP_SMUDGE=1 uv sync
       - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
       - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
       - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
       - ls -la /mnt/default_storage/qiming/datasets/libero_speed_varied/mixed/meta/ || (echo "ERROR Speed-varied dataset not found. Run data-prep-speed-varied first." && exit 1)
       - mkdir -p /mnt/default_storage/qiming/openpi/eval_results
-      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_speed_varied --exp-name=e2_speed_varied_study --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 30000 --save-interval 5000 --log-interval 100
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_speed_varied --exp-name=e2_speed_varied_study --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 30000 --save-interval 5000 --log-interval 100 --no-wandb-enabled
     submit_args:
       max_run_duration_seconds: 172800
       env:

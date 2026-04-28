@@ -138,12 +138,16 @@ def create_torch_dataset(
         return FakeDataset(model_config, num_samples=1024)
 
     root_kwargs = {}
-    if data_config.dataset_root is not None:
-        root_kwargs["root"] = data_config.dataset_root
+    dataset_root = data_config.dataset_root
+    # Allow env var override for local vs cluster paths
+    if os.environ.get("LIBERO_DATASET_ROOT"):
+        dataset_root = os.environ["LIBERO_DATASET_ROOT"]
+    if dataset_root is not None:
+        root_kwargs["root"] = dataset_root
     dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id, **root_kwargs)
     dataset = lerobot_dataset.LeRobotDataset(
         data_config.repo_id,
-        root=data_config.dataset_root,
+        root=dataset_root,
         delta_timestamps={
             key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
         },

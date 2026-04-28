@@ -972,6 +972,10 @@ _CONFIGS = [
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotLiberoDataConfig(
             repo_id="physical-intelligence/libero",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_libero",
+                asset_id="physical-intelligence/libero",
+            ),
             base_config=DataConfig(
                 prompt_from_task=True,
                 dataset_root="/mnt/default_storage/qiming/datasets/libero",
@@ -997,6 +1001,10 @@ _CONFIGS = [
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotLiberoDataConfig(
             repo_id="physical-intelligence/libero",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_libero",
+                asset_id="physical-intelligence/libero",
+            ),
             base_config=DataConfig(
                 prompt_from_task=True,
                 dataset_root="/mnt/default_storage/qiming/datasets/libero_speed_varied/mixed",

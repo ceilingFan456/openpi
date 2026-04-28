@@ -63,7 +63,10 @@ def main():
             episodes.append(json.loads(line))
     print(f"Total episodes: {len(episodes)}")
 
-    output_base = Path("/mnt/default_storage/qiming/datasets/libero_speed_varied")
+    output_base = Path(os.environ.get(
+        "LIBERO_SPEED_VARIED_OUTPUT",
+        "/mnt/default_storage/qiming/datasets/libero_speed_varied"
+    ))
     speed_factors = [0.5, 1.0, 2.0]
     motion_indices = [0, 1, 2, 3, 4, 5]
     gripper_indices = [6]
