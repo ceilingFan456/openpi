@@ -1169,7 +1169,7 @@ def main(
             instruction = "Place the orange block on top of the white block"
 
             # Run rollout
-            runner.run_rollout(instruction)
+            runner.run_rollout(TASK)
 
             # Ask if user wants to continue
             continue_prompt = input("\nRun another task? (y/n): ").strip().lower()

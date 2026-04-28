@@ -12,7 +12,7 @@ def main():
     import openpi.training.config as cfg
     import openpi.training.data_loader as dl
 
-    c = cfg.get_config("pi05_libero")
+    c = cfg.get_config("pi05_libero_blob")
     loader = dl.create_data_loader(c, shuffle=False, num_batches=5, framework="pytorch")
 
     count = 0

@@ -40,19 +40,20 @@ def interpolate_array(values, old_idx, new_idx, mode="linear"):
 def main():
     import pyarrow as pa
     import pyarrow.parquet as pq
-    from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata, LeRobotDataset
 
-    # Download dataset
-    print("Downloading Libero dataset metadata...")
-    meta = LeRobotDatasetMetadata("physical-intelligence/libero")
-    input_root = meta.root
-    fps = meta.fps
-    print(f"Input root: {input_root}, FPS: {fps}")
+    # Use blob-mounted dataset instead of downloading from HuggingFace
+    input_root = Path(os.environ.get(
+        "LIBERO_DATASET_ROOT",
+        "/mnt/default_storage/qiming/datasets/libero"
+    ))
+    print(f"Using dataset from: {input_root}")
 
-    # Download full dataset
-    print("Downloading full Libero dataset...")
-    ds = LeRobotDataset("physical-intelligence/libero")
-    print(f"Dataset loaded: {len(ds)} frames")
+    # Read fps from info.json
+    info_path = input_root / "meta" / "info.json"
+    with open(info_path) as f:
+        info = json.load(f)
+    fps = info.get("fps", 10)
+    print(f"FPS: {fps}")
 
     # Read episode info
     episodes_path = input_root / "meta" / "episodes.jsonl"
