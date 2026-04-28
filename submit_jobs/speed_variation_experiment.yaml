@@ -26,7 +26,7 @@ jobs:
   # E0: Raw base model verification (pipeline sanity check)
   ##########################################################################
   - name: e0-base-verify
-    sku: 1x NC24ad_A100_v4
+    sku: 1x ND12_H100_v5
     sla_tier: basic
     identity: managed
     command:
@@ -57,7 +57,7 @@ jobs:
   # E1: Finetune pi0.5 on original Libero dataset
   ##########################################################################
   - name: e1-original-finetune
-    sku: 1x NC24ad_A100_v4
+    sku: 1x ND12_H100_v5
     sla_tier: basic
     identity: managed
     command:
@@ -89,7 +89,7 @@ jobs:
   # Data Prep: Create speed-varied dataset on blob storage
   ##########################################################################
   - name: data-prep-speed-varied
-    sku: 1x NC24ad_A100_v4
+    sku: 1x ND12_H100_v5
     sla_tier: basic
     identity: managed
     command:
@@ -117,7 +117,7 @@ jobs:
   # NOTE: Submit AFTER data-prep-speed-varied completes
   ##########################################################################
   - name: e2-speed-varied-finetune
-    sku: 1x NC24ad_A100_v4
+    sku: 1x ND12_H100_v5
     sla_tier: basic
     identity: managed
     command:
