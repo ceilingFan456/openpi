@@ -1,0 +1,452 @@
+description: "pi05 speed variation study: E0 (base verify), E1 (original), E2 (speed-varied)"
+
+target:
+  service: sing
+  name: msrresrchbasicvc
+  workspace_name: shared_ws
+
+environment:
+  image: amlt-sing/2.5.0-cuda12.4-cudnn9-devel
+
+code:
+  local_dir: ../../openpi
+
+storage:
+  output:
+    storage_account_name: singaporeteamstorage
+    container_name: shared
+    mount_dir: /mnt/default_storage
+
+env_defaults:
+  USER: root
+  AMLT_VULN_SCAN_MODE: "none"
+
+jobs:
+  ##########################################################################
+  # E0: Raw base model verification (pipeline sanity check)
+  ##########################################################################
+  - name: e0-base-verify
+    sku: NC24ad_A100_v4:G1
+    sla_tier: basic
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      ## Install system deps
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      ## Install uv
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      ## Install Python deps
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      ## Apply transformers patches
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      ## Verify JAX
+      - uv run python -c "import jax; print('JAX devices:', jax.devices())"
+      ## Run dataset inspection (E0)
+      - uv run python -c "
+        import openpi.training.config as cfg;
+        import openpi.training.data_loader as dl;
+        c = cfg.get_config('pi05_libero');
+        loader = dl.create_data_loader(c, shuffle=False, num_batches=5, framework='pytorch');
+        count = 0;
+        for obs, act in loader:
+          count += 1;
+          print(f'Batch {count}: obs keys={list(obs.to_dict().keys()) if hasattr(obs, \"to_dict\") else \"?\"}, act shape={act.shape}');
+          if count >= 3: break;
+        print(f'E0 pipeline verification passed: {count} batches loaded.');
+        import json;
+        result = {'experiment_name': 'E0_raw_base', 'notes': f'Pipeline verified: loaded {count} batches'};
+        with open('/mnt/default_storage/qiming/openpi/eval_results/raw_base_offline_eval.json', 'w') as f:
+          json.dump(result, f, indent=2);
+        "
+    submit_args:
+      max_run_duration_seconds: 7200
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
+
+  ##########################################################################
+  # E1: Finetune pi0.5 on original Libero dataset
+  ##########################################################################
+  - name: e1-original-finetune
+    sku: NC24ad_A100_v4:G1
+    sla_tier: basic
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      ## Install system deps
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      ## Install uv
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      ## Install Python deps
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      ## Apply transformers patches
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      ## Create output dirs
+      - mkdir -p /mnt/default_storage/qiming/openpi/eval_results
+      ## Run training (E1)
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero --exp-name=e1_original_speed_study --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 30000 --save-interval 5000 --log-interval 100
+    submit_args:
+      max_run_duration_seconds: 172800
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_API_KEY: "e1b1fccedc5a6ad97a728268dc6a13c6bdc9f1ca"
+        WANDB_MODE: "online"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
+
+  ##########################################################################
+  # Data Prep: Create speed-varied dataset and upload to blob storage
+  ##########################################################################
+  - name: data-prep-speed-varied
+    sku: NC24ad_A100_v4:G1
+    sla_tier: basic
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      ## Install system deps
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      ## Install uv
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      ## Install Python deps
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install scipy
+      ## Download the Libero dataset first
+      - uv run python -c "
+        from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata;
+        meta = LeRobotDatasetMetadata('physical-intelligence/libero');
+        print(f'Dataset downloaded to: {meta.root}');
+        print(f'FPS: {meta.fps}');
+        "
+      ## Get the dataset root
+      - DATASET_ROOT=$$(uv run python -c "from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata; m = LeRobotDatasetMetadata('physical-intelligence/libero'); print(m.root)")
+      - echo "Dataset root: $$DATASET_ROOT"
+      ## Download full dataset (parquet files)
+      - uv run python -c "
+        from lerobot.common.datasets.lerobot_dataset import LeRobotDataset;
+        ds = LeRobotDataset('physical-intelligence/libero');
+        print(f'Dataset loaded: {len(ds)} frames');
+        "
+      ## Run speed resampling
+      - uv run python -c "
+        import sys, os;
+        sys.path.insert(0, '/scratch/amlt_code');
+        # Import our resampling code (uploaded with the code)
+        # We need to create the resampling module in-place
+        os.makedirs('/scratch/amlt_code/resampling', exist_ok=True);
+        "
+      ## Copy our resampling code from the uploaded arc_length_action code
+      ## Actually, let's do the resampling inline since the code is in the OpenPI repo
+      - uv run python << 'PYTHON_SCRIPT'
+        import json, shutil, sys, os
+        import numpy as np
+        from pathlib import Path
+        from scipy import interpolate
+
+        # === Speed resampling functions ===
+        def compute_new_length(T, speed_factor, min_length=16, max_length=None):
+            if max_length is None:
+                max_length = 3 * T
+            T_new = int(round(T / speed_factor))
+            return max(min_length, min(T_new, max_length))
+
+        def interpolate_array(values, old_idx, new_idx, mode="linear"):
+            T = len(old_idx)
+            T_new = len(new_idx)
+            if mode == "nearest":
+                nearest_idx = np.clip(np.round(new_idx).astype(int), 0, T - 1)
+                return values[nearest_idx]
+            result = np.zeros((T_new,) + values.shape[1:], dtype=values.dtype)
+            for d in range(values.shape[1] if values.ndim > 1 else 1):
+                col = values[:, d] if values.ndim > 1 else values
+                f = interpolate.interp1d(old_idx, col, kind="linear", fill_value="extrapolate")
+                if values.ndim > 1:
+                    result[:, d] = f(new_idx)
+                else:
+                    result = f(new_idx)
+            return result
+
+        # === Load Libero dataset ===
+        from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata, LeRobotDataset
+        import pyarrow.parquet as pq
+        import pandas as pd
+
+        meta = LeRobotDatasetMetadata("physical-intelligence/libero")
+        input_root = meta.root
+        fps = meta.fps
+        print(f"Input root: {input_root}, FPS: {fps}")
+
+        # Read episode info
+        episodes_path = input_root / "meta" / "episodes.jsonl"
+        episodes = []
+        with open(episodes_path) as f:
+            for line in f:
+                episodes.append(json.loads(line))
+        print(f"Total episodes: {len(episodes)}")
+
+        output_base = Path("/mnt/default_storage/qiming/datasets/libero_speed_varied")
+        speed_factors = [0.5, 1.0, 2.0]
+        motion_indices = [0, 1, 2, 3, 4, 5]
+        gripper_indices = [6]
+
+        # Process each speed factor
+        for speed in speed_factors:
+            speed_dir = output_base / f"speed_{speed:.1f}"
+            print(f"\n=== Creating speed={speed} dataset at {speed_dir} ===")
+
+            # Copy metadata
+            speed_dir.mkdir(parents=True, exist_ok=True)
+            src_meta = input_root / "meta"
+            dst_meta = speed_dir / "meta"
+            if dst_meta.exists():
+                shutil.rmtree(dst_meta)
+            shutil.copytree(src_meta, dst_meta)
+
+            episode_lengths = {}
+            data_dir = input_root / "data"
+
+            for i, ep_info in enumerate(episodes):
+                ep_idx = ep_info["episode_index"]
+                if (i + 1) % 100 == 0 or i == 0:
+                    print(f"  Processing episode {i+1}/{len(episodes)} (idx={ep_idx})")
+
+                # Find parquet file
+                parquet_file = None
+                for chunk_dir in sorted(data_dir.glob("chunk-*")):
+                    ep_file = chunk_dir / f"episode_{ep_idx:06d}.parquet"
+                    if ep_file.exists():
+                        parquet_file = ep_file
+                        break
+
+                if parquet_file is None:
+                    print(f"  WARNING: Episode {ep_idx} parquet not found, skipping")
+                    continue
+
+                df = pq.read_table(parquet_file).to_pandas()
+                T = len(df)
+
+                if speed == 1.0:
+                    # Just copy the file
+                    out_chunk = speed_dir / "data" / parquet_file.parent.name
+                    out_chunk.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(parquet_file, out_chunk / parquet_file.name)
+                    episode_lengths[ep_idx] = T
+                    continue
+
+                # Resample
+                T_new = compute_new_length(T, speed, min_length=16)
+                old_idx = np.arange(T, dtype=np.float64)
+                new_idx = np.linspace(0, T - 1, T_new)
+
+                new_data = {
+                    "episode_index": np.full(T_new, ep_idx, dtype=np.int64),
+                    "frame_index": np.arange(T_new, dtype=np.int64),
+                    "timestamp": (np.arange(T_new, dtype=np.float64) / fps if fps else np.linspace(0, df["timestamp"].iloc[-1], T_new)),
+                }
+
+                if "task_index" in df.columns:
+                    new_data["task_index"] = np.full(T_new, int(df["task_index"].iloc[0]), dtype=np.int64)
+
+                # Resample each column
+                for col in df.columns:
+                    if col in ("episode_index", "frame_index", "timestamp", "task_index"):
+                        continue
+                    vals = df[col].tolist()
+                    if isinstance(vals[0], (list, np.ndarray)):
+                        arr = np.array(vals, dtype=np.float32)
+                        if "action" in col.lower():
+                            # Separate motion and gripper
+                            if arr.shape[1] == 7:
+                                motion = interpolate_array(arr[:, motion_indices], old_idx, new_idx, "linear")
+                                gripper = interpolate_array(arr[:, gripper_indices], old_idx, new_idx, "nearest")
+                                new_arr = np.zeros((T_new, 7), dtype=np.float32)
+                                new_arr[:, motion_indices] = motion
+                                new_arr[:, gripper_indices] = gripper
+                            else:
+                                new_arr = interpolate_array(arr, old_idx, new_idx, "linear").astype(np.float32)
+                            new_data[col] = [new_arr[i].tolist() for i in range(T_new)]
+                        elif "state" in col.lower():
+                            new_arr = interpolate_array(arr, old_idx, new_idx, "linear").astype(np.float32)
+                            new_data[col] = [new_arr[i].tolist() for i in range(T_new)]
+                        else:
+                            # Image paths or other list columns: nearest
+                            nearest_idx = np.clip(np.round(new_idx).astype(int), 0, T - 1)
+                            new_data[col] = [vals[j] for j in nearest_idx]
+                    else:
+                        arr = np.array(vals)
+                        if arr.dtype.kind == "f":
+                            new_data[col] = interpolate_array(arr, old_idx, new_idx, "linear")
+                        else:
+                            nearest_idx = np.clip(np.round(new_idx).astype(int), 0, T - 1)
+                            new_data[col] = arr[nearest_idx]
+
+                # Save
+                import pyarrow as pa
+                out_chunk = speed_dir / "data" / "chunk-000"
+                out_chunk.mkdir(parents=True, exist_ok=True)
+                table = pa.table(new_data)
+                pq.write_table(table, out_chunk / f"episode_{ep_idx:06d}.parquet")
+                episode_lengths[ep_idx] = T_new
+
+            # Update episode metadata
+            updated_lines = []
+            with open(speed_dir / "meta" / "episodes.jsonl") as f:
+                for line in f:
+                    ep = json.loads(line)
+                    if ep["episode_index"] in episode_lengths:
+                        ep["length"] = episode_lengths[ep["episode_index"]]
+                    updated_lines.append(json.dumps(ep))
+            with open(speed_dir / "meta" / "episodes.jsonl", "w") as f:
+                for line in updated_lines:
+                    f.write(line + "\n")
+
+            # Update info.json
+            info_path = speed_dir / "meta" / "info.json"
+            with open(info_path) as f:
+                info = json.load(f)
+            info["total_frames"] = sum(episode_lengths.values())
+            with open(info_path, "w") as f:
+                json.dump(info, f, indent=2)
+
+            print(f"  Done: {len(episode_lengths)} episodes, {sum(episode_lengths.values())} total frames")
+
+        # === Create mixed dataset ===
+        print("\n=== Creating mixed training dataset ===")
+        rng = np.random.RandomState(42)
+        mixed_dir = output_base / "mixed"
+
+        # Copy metadata from original
+        src_meta = (output_base / "speed_1.0" / "meta")
+        dst_meta = mixed_dir / "meta"
+        mixed_dir.mkdir(parents=True, exist_ok=True)
+        if dst_meta.exists():
+            shutil.rmtree(dst_meta)
+        shutil.copytree(src_meta, dst_meta)
+
+        episode_lengths = {}
+        speed_assignments = {}
+
+        for i, ep_info in enumerate(episodes):
+            ep_idx = ep_info["episode_index"]
+            speed = float(rng.choice(speed_factors))
+            speed_assignments[ep_idx] = speed
+
+            src_speed_dir = output_base / f"speed_{speed:.1f}"
+            src_parquet = None
+            for chunk_dir in sorted((src_speed_dir / "data").glob("chunk-*")):
+                ep_file = chunk_dir / f"episode_{ep_idx:06d}.parquet"
+                if ep_file.exists():
+                    src_parquet = ep_file
+                    break
+
+            if src_parquet is None:
+                print(f"  WARNING: Missing episode {ep_idx} at speed {speed}")
+                continue
+
+            out_chunk = mixed_dir / "data" / "chunk-000"
+            out_chunk.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_parquet, out_chunk / f"episode_{ep_idx:06d}.parquet")
+
+            df = pq.read_table(src_parquet).to_pandas()
+            episode_lengths[ep_idx] = len(df)
+
+        # Update mixed metadata
+        updated_lines = []
+        with open(mixed_dir / "meta" / "episodes.jsonl") as f:
+            for line in f:
+                ep = json.loads(line)
+                if ep["episode_index"] in episode_lengths:
+                    ep["length"] = episode_lengths[ep["episode_index"]]
+                updated_lines.append(json.dumps(ep))
+        with open(mixed_dir / "meta" / "episodes.jsonl", "w") as f:
+            for line in updated_lines:
+                f.write(line + "\n")
+
+        info_path = mixed_dir / "meta" / "info.json"
+        with open(info_path) as f:
+            info = json.load(f)
+        info["total_frames"] = sum(episode_lengths.values())
+        with open(info_path, "w") as f:
+            json.dump(info, f, indent=2)
+
+        # Save assignments
+        with open(output_base / "speed_assignments.json", "w") as f:
+            json.dump({
+                "seed": 42, "speed_choices": speed_factors,
+                "assignments": {str(k): v for k, v in speed_assignments.items()},
+                "distribution": {str(s): sum(1 for v in speed_assignments.values() if v == s) for s in speed_factors},
+            }, f, indent=2)
+
+        dist = {s: sum(1 for v in speed_assignments.values() if v == s) for s in speed_factors}
+        print(f"Mixed dataset: {len(episode_lengths)} episodes, {sum(episode_lengths.values())} frames")
+        print(f"Speed distribution: {dist}")
+        print("Done!")
+        PYTHON_SCRIPT
+    submit_args:
+      max_run_duration_seconds: 43200
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
+
+  ##########################################################################
+  # E2: Finetune pi0.5 on speed-varied Libero dataset
+  # NOTE: This should be submitted AFTER data-prep-speed-varied completes
+  ##########################################################################
+  - name: e2-speed-varied-finetune
+    sku: NC24ad_A100_v4:G1
+    sla_tier: basic
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      ## Install system deps
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      ## Install uv
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      ## Install Python deps
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      ## Apply transformers patches
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      ## Verify speed-varied dataset exists
+      - ls -la /mnt/default_storage/qiming/datasets/libero_speed_varied/mixed/meta/ || (echo "ERROR: Speed-varied dataset not found. Run data-prep-speed-varied first." && exit 1)
+      ## Create output dirs
+      - mkdir -p /mnt/default_storage/qiming/openpi/eval_results
+      ## Run training (E2)
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_speed_varied --exp-name=e2_speed_varied_study --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 30000 --save-interval 5000 --log-interval 100
+    submit_args:
+      max_run_duration_seconds: 172800
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_API_KEY: "e1b1fccedc5a6ad97a728268dc6a13c6bdc9f1ca"
+        WANDB_MODE: "online"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
