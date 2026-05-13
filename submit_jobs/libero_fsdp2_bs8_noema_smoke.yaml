@@ -1,0 +1,57 @@
+description: "fsdp2 smoke tests on 8x40GB A100: bs=8 no-EMA"
+
+target:
+  service: sing
+  name: msrresrchbasicvc
+  workspace_name: shared_ws
+
+environment:
+  image: amlt-sing/2.5.0-cuda12.4-cudnn9-devel
+
+code:
+  local_dir: $CONFIG_DIR/..
+
+storage:
+  output:
+    storage_account_name: singaporeteamstorage
+    container_name: shared
+    mount_dir: /mnt/default_storage
+
+env_defaults:
+  USER: root
+  AMLT_VULN_SCAN_MODE: "none"
+
+jobs:
+  # --- fsdp2 bs8 no-EMA: saves ~5GB per GPU vs previous fsdp2-bs8 attempt ---
+  - name: smoke-fsdp2-bs8-noema
+    sku: 40G8-A100-NvLink
+    sla_tier: standard
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      - ls -la /mnt/default_storage/qiming/datasets/libero_3task/meta/
+      - echo "=== FSDP=2 batch=8 no-EMA mesh=(4,2) ==="
+      - LIBERO_DATASET_ROOT=/mnt/default_storage/qiming/datasets/libero_3task XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_5task --exp-name=smoke_fsdp2_bs8_noema_0430 --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=8 --fsdp-devices=2 --ema-decay=None --overwrite --num-train-steps=20 --save-interval=20 --log-interval=5
+    submit_args:
+      max_run_duration_seconds: 7200
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_BASE_URL: "https://api.wandb.ai"
+        WANDB_API_KEY: "$WANDB_API_KEY"
+        WANDB_MODE: "online"
+        WANDB_RUN_GROUP: "fsdp2-smoke-0430b"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"

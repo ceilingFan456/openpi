@@ -1,0 +1,73 @@
+description: "E_arc 30k production: pi05 finetuned on greedy-arc geometric tokens (LIBERO 3-task, 30k steps, K_max=16, ds=5mm, alpha=0.02). Same data prep as the 2k smoke; longer training horizon and standard SLA so it doesn't get pre-empted."
+
+target:
+  service: sing
+  name: msrresrchbasicvc
+  workspace_name: shared_ws
+
+environment:
+  image: amlt-sing/2.5.0-cuda12.4-cudnn9-devel
+
+code:
+  local_dir: $CONFIG_DIR/..
+
+storage:
+  output:
+    storage_account_name: singaporeteamstorage
+    container_name: shared
+    mount_dir: /mnt/default_storage
+
+env_defaults:
+  USER: root
+  AMLT_VULN_SCAN_MODE: "none"
+
+jobs:
+  - name: arc-tokens-3task-30k
+    sku: 80G1-A100
+    sla_tier: standard
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      # Step 1: build the arc-tokens dataset on shared storage. The 2k smoke already wrote
+      # this dataset; --overwrite is kept so a fresh data_prep_arc_tokens.py is rerun if
+      # the script changes. If the dataset is identical, this just regenerates the same
+      # bytes (no harm, costs ~3 min).
+      - uv run python scripts/data_prep_arc_tokens.py
+          --input-root /mnt/default_storage/qiming/datasets/libero_3task
+          --output-root /mnt/default_storage/qiming/datasets/libero_3task_arc_tokens
+          --ds 0.005 --alpha 0.02 --gripper-width 0.08 --K-max 16 --L 20 --overwrite
+      - ls -la /mnt/default_storage/qiming/datasets/libero_3task_arc_tokens/meta/
+      - cat /mnt/default_storage/qiming/datasets/libero_3task_arc_tokens/arc_tokens_summary.json | python -m json.tool | head -25
+      # Step 2: 30k-step finetune. Save every 5k for inspection; keep all kept checkpoints.
+      - LIBERO_DATASET_ROOT=/mnt/default_storage/qiming/datasets/libero_3task_arc_tokens
+        XLA_PYTHON_CLIENT_MEM_FRACTION=0.9
+        uv run scripts/train.py pi05_libero_3task_arc_tokens
+          --exp-name=arc_tokens_libero_3task_30k_0512
+          --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints
+          --batch-size=16
+          --overwrite
+          --num-train-steps=30000
+          --save-interval=5000
+          --keep-period=5000
+          --log-interval=50
+          --no-wandb-enabled
+    submit_args:
+      max_run_duration_seconds: 86400
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_MODE: "disabled"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"

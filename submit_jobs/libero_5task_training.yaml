@@ -1,0 +1,88 @@
+description: "pi05 LIBERO 5-task benchmark: original vs speed-varied finetuning, 2-GPU W&B runs"
+
+target:
+  service: sing
+  name: msrresrchbasicvc
+  workspace_name: shared_ws
+
+environment:
+  image: amlt-sing/2.5.0-cuda12.4-cudnn9-devel
+
+code:
+  local_dir: $CONFIG_DIR/..
+
+storage:
+  output:
+    storage_account_name: singaporeteamstorage
+    container_name: shared
+    mount_dir: /mnt/default_storage
+
+env_defaults:
+  USER: root
+  AMLT_VULN_SCAN_MODE: "none"
+
+jobs:
+  - name: e1-libero-5task-original
+    sku: 80G2-A100
+    sla_tier: basic
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      - ls -la /mnt/default_storage/qiming/datasets/libero_5task/meta/
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_5task --exp-name=e1_libero_5task_original_2gpu_wandb --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 10000 --save-interval 1000 --log-interval 100
+    submit_args:
+      max_run_duration_seconds: 86400
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_BASE_URL: "https://api.wandb.ai"
+        WANDB_API_KEY: "$WANDB_API_KEY"
+        WANDB_MODE: "online"
+        WANDB_RUN_GROUP: "speed-var-5task-2gpu-0428b"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
+
+
+  - name: e2-libero-5task-speed-varied
+    sku: 80G2-A100
+    sla_tier: basic
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      - ls -la /mnt/default_storage/qiming/datasets/libero_5task_speed_varied/mixed/meta/
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_5task_speed_varied --exp-name=e2_libero_5task_speed_varied_2gpu_wandb --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps 10000 --save-interval 1000 --log-interval 100
+    submit_args:
+      max_run_duration_seconds: 86400
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_BASE_URL: "https://api.wandb.ai"
+        WANDB_API_KEY: "$WANDB_API_KEY"
+        WANDB_MODE: "online"
+        WANDB_RUN_GROUP: "speed-var-5task-2gpu-0428b"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"

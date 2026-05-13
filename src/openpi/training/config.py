@@ -1024,6 +1024,157 @@ _CONFIGS = [
         num_train_steps=30_000,
     ),
 
+    # E1 5-task subset: original LIBERO trajectories for fast simulation benchmarking.
+    TrainConfig(
+        name="pi05_libero_5task",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_libero",
+                asset_id="physical-intelligence/libero",
+            ),
+            base_config=DataConfig(
+                prompt_from_task=True,
+                dataset_root="/mnt/default_storage/qiming/datasets/libero_5task",
+            ),
+            extra_delta_transform=False,
+        ),
+        batch_size=16,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=10_000,
+    ),
+
+    # E6: action_horizon=20 variant of pi05_libero_5task.
+    TrainConfig(
+        name="pi05_libero_5task_ah20",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=20, discrete_state_input=False),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_libero",
+                asset_id="physical-intelligence/libero",
+            ),
+            base_config=DataConfig(
+                prompt_from_task=True,
+                dataset_root="/mnt/default_storage/qiming/datasets/libero_5task",
+            ),
+            extra_delta_transform=False,
+        ),
+        batch_size=16,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=10_000,
+    ),
+
+    # E7: action_horizon=40 variant of pi05_libero_5task.
+    TrainConfig(
+        name="pi05_libero_5task_ah40",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=40, discrete_state_input=False),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_libero",
+                asset_id="physical-intelligence/libero",
+            ),
+            base_config=DataConfig(
+                prompt_from_task=True,
+                dataset_root="/mnt/default_storage/qiming/datasets/libero_5task",
+            ),
+            extra_delta_transform=False,
+        ),
+        batch_size=16,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=10_000,
+    ),
+
+    # E2 5-task subset: one speed-resampled variant per episode sampled from 0.5x, 1.0x, and 2.0x.
+    TrainConfig(
+        name="pi05_libero_5task_speed_varied",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_libero",
+                asset_id="physical-intelligence/libero",
+            ),
+            base_config=DataConfig(
+                prompt_from_task=True,
+                dataset_root="/mnt/default_storage/qiming/datasets/libero_5task_speed_varied/mixed",
+            ),
+            extra_delta_transform=False,
+        ),
+        batch_size=16,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=10_000,
+    ),
+
+    # E_arc: pi0.5 finetuned on greedy-arc geometric tokens for LIBERO 3-task.
+    # Action stream is rewritten by `scripts/data_prep_arc_tokens.py` so each
+    # row of the 7-D action vector is one token of the form
+    # [is_eos, is_arc, kappa_signed, delta_s, n_x, n_y, n_z]. Each chunk emits
+    # K_max=16 contiguous frames sharing the chunk-start image/state, which is
+    # exactly what action_horizon=16 lets the model predict in one shot.
+    # See ../../../method.md (in arc_length_action repo) for the full method.
+    TrainConfig(
+        name="pi05_libero_3task_arc_tokens",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=16, discrete_state_input=False),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            assets=AssetsConfig(
+                assets_dir="./assets/pi05_libero",
+                asset_id="physical-intelligence/libero",
+            ),
+            base_config=DataConfig(
+                prompt_from_task=True,
+                dataset_root="/mnt/default_storage/qiming/datasets/libero_3task_arc_tokens",
+            ),
+            extra_delta_transform=False,
+        ),
+        batch_size=16,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=10_000,
+    ),
+
     ## our own training configuration. 
     TrainConfig(
         name="pi05_lab",

@@ -5,7 +5,9 @@ checkpoints/
 selected_checkpoints/
 google-cloud-sdk/
 third_party/
-assets/
+assets/*
+!assets/pi05_libero/
+!assets/pi05_libero/**
 sample_first_added_frame/
 testing_state_redundancy/results/
 __pycache__/

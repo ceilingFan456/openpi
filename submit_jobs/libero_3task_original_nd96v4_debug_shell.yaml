@@ -1,0 +1,57 @@
+description: "Interactive debug shell for pi05 LIBERO 3-task original-speed OOM on ND96_v4 8x40GB A100"
+
+target:
+  service: sing
+  name: msrresrchbasicvc
+  workspace_name: shared_ws
+
+environment:
+  image: amlt-sing/2.5.0-cuda12.4-cudnn9-devel
+
+code:
+  local_dir: $CONFIG_DIR/..
+
+storage:
+  output:
+    storage_account_name: singaporeteamstorage
+    container_name: shared
+    mount_dir: /mnt/default_storage
+
+env_defaults:
+  USER: root
+  AMLT_VULN_SCAN_MODE: "none"
+
+jobs:
+  - name: debug-libero-3task-original-nd96v4-40g8-a100
+    sku: 40G8-A100-NvLink
+    sla_tier: standard
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      - ls -la /mnt/default_storage/qiming/datasets/libero_3task/meta/
+      - printf '%s\n' 'Debug node ready.' 'Suggested checks:' '  nvidia-smi' '  cd /scratch/amlt_code' '  LIBERO_DATASET_ROOT=/mnt/default_storage/qiming/datasets/libero_3task XLA_PYTHON_CLIENT_MEM_FRACTION=0.6 uv run scripts/train.py pi05_libero_5task --exp-name=debug_repro --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/debug_checkpoints --batch-size=8 --overwrite --num-train-steps 2 --save-interval 2 --log-interval 1' > /scratch/amlt_code/DEBUG_README.txt
+      - echo "Job is up, sleeping for SSH..."
+      - sleep infinity
+    submit_args:
+      max_run_duration_seconds: 14400
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_BASE_URL: "https://api.wandb.ai"
+        WANDB_API_KEY: "$WANDB_API_KEY"
+        WANDB_MODE: "online"
+        WANDB_RUN_GROUP: "speed-var-3task-nd96v4-debug-0429h"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"

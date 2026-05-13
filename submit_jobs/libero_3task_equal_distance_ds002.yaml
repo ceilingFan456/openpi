@@ -1,0 +1,113 @@
+description: "Equal-distance position-action baseline for LIBERO 3-task: original, speed-varied, speed-quarter; ds=0.002; keep checkpoints 2499 and final 4999"
+
+target:
+  service: sing
+  name: msrresrchbasicvc
+  workspace_name: shared_ws
+
+environment:
+  image: amlt-sing/2.5.0-cuda12.4-cudnn9-devel
+
+code:
+  local_dir: $CONFIG_DIR/..
+
+storage:
+  output:
+    storage_account_name: singaporeteamstorage
+    container_name: shared
+    mount_dir: /mnt/default_storage
+
+env_defaults:
+  USER: root
+  AMLT_VULN_SCAN_MODE: "none"
+
+jobs:
+  - name: edpos-original-ds002-5k
+    sku: 80G1-A100
+    sla_tier: standard
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      - uv run python scripts/data_prep_equal_distance_actions.py --input-root /mnt/default_storage/qiming/datasets/libero_3task --output-root /mnt/default_storage/qiming/datasets/libero_3task_equal_distance_ds002 --ds 0.002 --overwrite
+      - ls -la /mnt/default_storage/qiming/datasets/libero_3task_equal_distance_ds002/meta/
+      - LIBERO_DATASET_ROOT=/mnt/default_storage/qiming/datasets/libero_3task_equal_distance_ds002 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_5task --exp-name=edpos_libero_3task_original_ds002_0511 --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps=5000 --save-interval=2499 --keep-period=2499 --log-interval=50 --no-wandb-enabled
+    submit_args:
+      max_run_duration_seconds: 86400
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_MODE: "disabled"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
+
+  - name: edpos-speed-varied-ds002-5k
+    sku: 80G1-A100
+    sla_tier: standard
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      - uv run python scripts/data_prep_equal_distance_actions.py --input-root /mnt/default_storage/qiming/datasets/libero_3task --output-root /mnt/default_storage/qiming/datasets/libero_3task_speed_varied_equal_distance_ds002 --ds 0.002 --episode-speed-choices 0.5 1.0 2.0 --speed-seed 42 --overwrite
+      - ls -la /mnt/default_storage/qiming/datasets/libero_3task_speed_varied_equal_distance_ds002/meta/
+      - LIBERO_DATASET_ROOT=/mnt/default_storage/qiming/datasets/libero_3task_speed_varied_equal_distance_ds002 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_5task_speed_varied --exp-name=edpos_libero_3task_speed_varied_ds002_0511 --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps=5000 --save-interval=2499 --keep-period=2499 --log-interval=50 --no-wandb-enabled
+    submit_args:
+      max_run_duration_seconds: 86400
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_MODE: "disabled"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
+
+  - name: edpos-speed-quarter-ds002-5k
+    sku: 80G1-A100
+    sla_tier: standard
+    identity: managed
+    command:
+      - set -e
+      - cd /scratch/amlt_code
+      - nvidia-smi
+      - sudo apt-get update && sudo apt-get install -y git git-lfs build-essential clang curl ca-certificates pkg-config software-properties-common
+      - sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+      - sudo apt-get update && sudo apt-get install -y ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+      - git lfs install
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$$HOME/.local/bin:$$HOME/.cargo/bin:$$PATH"
+      - GIT_LFS_SKIP_SMUDGE=1 uv sync
+      - GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+      - uv pip install "datasets<4"
+      - TRANSFORMERS_DIR=$$(uv run python -c "import transformers, os; print(os.path.dirname(transformers.__file__))")
+      - cp -r src/openpi/models_pytorch/transformers_replace/* "$$TRANSFORMERS_DIR/"
+      - uv run python scripts/data_prep_equal_distance_actions.py --input-root /mnt/default_storage/qiming/datasets/libero_3task_speed_extreme_quarter/mixed --output-root /mnt/default_storage/qiming/datasets/libero_3task_speed_quarter_equal_distance_ds002 --ds 0.002 --overwrite
+      - ls -la /mnt/default_storage/qiming/datasets/libero_3task_speed_quarter_equal_distance_ds002/meta/
+      - LIBERO_DATASET_ROOT=/mnt/default_storage/qiming/datasets/libero_3task_speed_quarter_equal_distance_ds002 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_libero_5task_speed_varied --exp-name=edpos_libero_3task_speed_quarter_ds002_0511 --checkpoint-base-dir=/mnt/default_storage/qiming/openpi/checkpoints --batch-size=16 --overwrite --num-train-steps=5000 --save-interval=2499 --keep-period=2499 --log-interval=50 --no-wandb-enabled
+    submit_args:
+      max_run_duration_seconds: 86400
+      env:
+        AMLT_BLOB_ROOT_DIR: /mnt/default_storage
+        XLA_PYTHON_CLIENT_MEM_FRACTION: "0.9"
+        WANDB_MODE: "disabled"
+        _AZUREML_SINGULARITY_JOB_UAI: "/subscriptions/e033d461-1923-44a7-872b-78f1d35a86dd/resourcegroups/SingaporeTeam/providers/Microsoft.ManagedIdentity/userAssignedIdentities/shared_mi"
